@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, setDoc, addDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, setDoc, addDoc, updateDoc, onSnapshot, deleteDoc, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { auth, db } from './firebase';
 import './App.css';
@@ -8,24 +8,29 @@ import './App.css';
 // --- HELPER FUNCTIONS ---
 const getDaysArray = (month, year) => Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) => i + 1);
 const getDayName = (day, month, year) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(year, month - 1, day).getDay()];
+const sortEmployees = (list, sortBy) => {
+  return [...list].sort((a, b) => {
+    if (sortBy === 'name') {
+      const nameA = a.name.split(' ').pop(); const nameB = b.name.split(' ').pop();
+      return nameA.localeCompare(nameB);
+    } else {
+      const priority = { "Trưởng Khoa": 1, "Phó Khoa": 2, "Bác sĩ": 3, "Điều dưỡng": 4, "Y tá": 5 };
+      return (priority[a.position] || 99) - (priority[b.position] || 99);
+    }
+  });
+};
 
-// --- COMPONENT: SIDEBAR (Responsive) ---
+// --- COMPONENTS ---
 const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
   <>
-    {/* Màn che đen khi mở menu trên mobile */}
     {isOpen && <div className="sidebar-overlay" onClick={onClose}></div>}
-    
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <span>🏥 HospitalApp</span>
-        {/* Nút đóng trên mobile */}
         <span onClick={onClose} style={{cursor:'pointer', fontSize:24, display: window.innerWidth > 768 ? 'none':'block'}}>&times;</span>
       </div>
-      
-      <div className="menu-item active">🏠 Trang Chủ</div>
-      {userRole === 'ADMIN' && <div className="menu-item">🔧 Quản trị</div>}
+      <div className="menu-item active">🏠 {userRole === 'ADMIN' ? 'Quản Trị' : 'Trang Chủ'}</div>
       <div className="menu-item" onClick={()=>{onOpenChangePass(); onClose();}}>🔒 Đổi Mật Khẩu</div>
-      
       <div style={{marginTop: 'auto', padding: '20px'}}>
         <button onClick={onLogout} className="btn btn-logout" style={{width: '100%'}}>Đăng Xuất</button>
       </div>
@@ -33,67 +38,86 @@ const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
   </>
 );
 
-// --- COMPONENT: HEADER (Có nút Menu) ---
 const Header = ({ title, email, notifications = [], onMenuClick }) => {
   const [showDropdown, setShowDropdown] = useState(false);
-  const [localUnread, setLocalUnread] = useState(notifications.length);
+  const [localUnread, setLocalUnread] = useState(0);
   useEffect(() => { setLocalUnread(notifications.length); }, [notifications]);
-
+  const handleBellClick = async () => {
+    setShowDropdown(!showDropdown);
+    if (!showDropdown && notifications.length > 0) {
+      setLocalUnread(0);
+      const batch = writeBatch(db);
+      notifications.forEach(notif => { const ref = doc(db, "requests", notif.id); batch.update(ref, { isRead: true }); });
+      await batch.commit();
+    }
+  };
   return (
     <div className="top-header">
       <div style={{display:'flex', alignItems:'center', gap:10}}>
-        {/* Nút Hamburger cho Mobile */}
         <button className="menu-btn" onClick={onMenuClick}>☰</button>
         <h2 style={{margin: 0, fontSize: '16px', color: '#334155'}}>{title}</h2>
       </div>
-
       <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
         <div className="notification-container">
-          <div className="notification-bell" onClick={()=>{setShowDropdown(!showDropdown); if(!showDropdown) setLocalUnread(0);}}>
-            🔔 {localUnread > 0 && <span className="badge">{localUnread}</span>}
-          </div>
+          <div className="notification-bell" onClick={handleBellClick}>🔔 {localUnread > 0 && <span className="badge">{localUnread}</span>}</div>
           {showDropdown && (
             <div className="notification-dropdown">
-              <div style={{fontWeight:'bold', padding:10, borderBottom:'1px solid #eee'}}>Thông báo ({notifications.length})</div>
-              {notifications.length === 0 && <div style={{padding:15, color:'#888', textAlign:'center'}}>Không có tin mới</div>}
+              <div style={{fontWeight:'bold', padding:10, borderBottom:'1px solid #eee'}}>Thông báo mới ({notifications.length})</div>
+              {notifications.length === 0 && <div style={{padding:15, color:'#888', textAlign:'center'}}>Không có thông báo mới</div>}
               {notifications.map((n, i) => (
                 <div key={i} className="notif-item">
-                  <div style={{fontWeight:'bold', color:'green'}}>✅ Đã duyệt: {n.empName}</div>
-                  <div style={{fontSize:12, color:'#555'}}>Ngày {n.day}/{n.month} &rarr; <b>{n.requestType}</b></div>
+                  <div style={{fontWeight:'bold', color: n.status === 'APPROVED' ? 'green' : 'red'}}>{n.status === 'APPROVED' ? '✅ Đã duyệt' : '❌ Từ chối'}: {n.empName}</div>
+                  <div style={{fontSize:12, color:'#555'}}>Ngày {n.day}/{n.month} &rarr; <b>{n.requestType}</b>{n.status === 'REJECTED' && <div>Lý do: {n.rejectReason}</div>}</div>
                 </div>
               ))}
             </div>
           )}
         </div>
-        {/* Ẩn email trên mobile cho đỡ chật */}
         <div style={{fontSize: '13px', fontWeight: 500, display: window.innerWidth < 500 ? 'none':'block'}}>{email}</div>
       </div>
     </div>
   );
 };
 
-// --- CÁC MODAL (Giữ nguyên logic) ---
 const RequestModal = ({ isOpen, onClose, onSubmit, dateInfo }) => {
-  const [reason, setReason] = useState('');
-  const [type, setType] = useState('X');
+  const [reason, setReason] = useState(''); const [type, setType] = useState('X');
   if (!isOpen) return null;
   return (
     <div className="modal-overlay">
       <div className="modal-content">
         <h3>📝 Gửi yêu cầu</h3>
         <p style={{fontSize:13, color:'#666', marginBottom:10}}>Ngày: {dateInfo.day}/{dateInfo.month}/{dateInfo.year}</p>
-        <div className="form-group">
-          <label>Sửa thành:</label>
-          <select className="select-box" style={{width:'100%'}} value={type} onChange={e=>setType(e.target.value)}>
-            <option value="X">✅ Đi làm (X)</option>
-            <option value="P">⚠️ Nghỉ phép (P)</option>
-            <option value="KP">❌ Không phép (KP)</option>
-          </select>
-        </div>
+        <div className="form-group"><label>Sửa thành:</label><select className="select-box" style={{width:'100%'}} value={type} onChange={e=>setType(e.target.value)}><option value="X">✅ Đi làm (X)</option><option value="P">⚠️ Nghỉ phép (P)</option><option value="KP">❌ Không phép (KP)</option></select></div>
         <div className="form-group"><label>Lý do:</label><input className="login-input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do..." /></div>
-        <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:20}}>
-          <button className="btn" onClick={onClose} style={{background:'#f1f5f9', color:'#333'}}>Hủy</button>
-          <button className="btn btn-primary" onClick={() => onSubmit(type, reason)}>Gửi</button>
+        <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:20}}><button className="btn" onClick={onClose} style={{background:'#f1f5f9', color:'#333'}}>Hủy</button><button className="btn btn-primary" onClick={() => onSubmit(type, reason)}>Gửi</button></div>
+      </div>
+    </div>
+  );
+};
+
+// --- MODAL BÁO CÁO VẮNG (MỚI CHO GIAMDOC) ---
+const AbsentReportModal = ({ isOpen, onClose, absentList }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content modal-lg">
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:15}}>
+          <h3 style={{margin:0}}>📉 Báo cáo vắng hôm nay ({new Date().getDate()}/{new Date().getMonth()+1})</h3>
+          <button onClick={onClose} style={{background:'none', border:'none', fontSize:20, cursor:'pointer'}}>&times;</button>
+        </div>
+        <div style={{maxHeight: 400, overflow:'auto'}}>
+          <table className="request-table">
+            <thead><tr><th>Khoa</th><th>Nhân viên</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+              {absentList.length === 0 ? (<tr><td colSpan={3} style={{textAlign:'center', padding:20}}>Hôm nay đi làm đầy đủ! 🎉</td></tr>) : 
+              absentList.map((item, i) => (
+                <tr key={i}>
+                  <td>{item.dept}</td><td>{item.name}</td>
+                  <td><span className={`status-badge ${item.status==='P'?'badge-p':'badge-kp'}`}>{item.status === 'P' ? 'Nghỉ phép' : 'Chưa chấm / KP'}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -101,49 +125,30 @@ const RequestModal = ({ isOpen, onClose, onSubmit, dateInfo }) => {
 };
 
 const ChangePasswordModal = ({ isOpen, onClose, onLogout }) => {
-  const [oldPass, setOldPass] = useState('');
-  const [newPass, setNewPass] = useState('');
+  const [oldPass, setOldPass] = useState(''); const [newPass, setNewPass] = useState('');
   const handleChange = async (e) => {
     e.preventDefault(); if(!auth.currentUser) return;
-    try {
-      await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, oldPass));
-      await updatePassword(auth.currentUser, newPass);
-      alert("Thành công! Vui lòng đăng nhập lại."); onClose(); onLogout();
-    } catch (err) { alert("Lỗi: " + err.message); }
+    try { await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, oldPass)); await updatePassword(auth.currentUser, newPass); alert("Thành công! Đăng nhập lại."); onClose(); onLogout(); } catch (err) { alert("Lỗi: " + err.message); }
   };
   if (!isOpen) return null;
   return (
     <div className="modal-overlay">
       <div className="modal-content">
         <h3>🔒 Đổi Mật Khẩu</h3>
-        <form onSubmit={handleChange}>
-          <div className="form-group"><input className="login-input" type="password" placeholder="Mật khẩu cũ" value={oldPass} onChange={e=>setOldPass(e.target.value)} required /></div>
-          <div className="form-group"><input className="login-input" type="password" placeholder="Mật khẩu mới" value={newPass} onChange={e=>setNewPass(e.target.value)} required /></div>
-          <button className="btn btn-primary" style={{width:'100%'}}>Lưu</button>
-          <button type="button" className="btn" onClick={onClose} style={{width:'100%', marginTop:10, background:'#f1f5f9', color:'#333'}}>Hủy</button>
-        </form>
+        <form onSubmit={handleChange}><div className="form-group"><input className="login-input" type="password" placeholder="Mật khẩu cũ" value={oldPass} onChange={e=>setOldPass(e.target.value)} required /></div><div className="form-group"><input className="login-input" type="password" placeholder="Mật khẩu mới" value={newPass} onChange={e=>setNewPass(e.target.value)} required /></div><button className="btn btn-primary" style={{width:'100%'}}>Lưu</button><button type="button" className="btn" onClick={onClose} style={{width:'100%', marginTop:10, background:'#f1f5f9', color:'#333'}}>Hủy</button></form>
       </div>
     </div>
   );
 };
 
-// --- BẢNG CHẤM CÔNG (Responsive) ---
 const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, pendingKeys = [] }) => {
   const days = getDaysArray(month, year);
   return (
     <div className="matrix-wrapper">
       <table className="matrix-table">
         <thead>
-          <tr>
-            <th style={{height: 35}}></th>
-            {days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}
-            <th colSpan={3} style={{background: '#f1f5f9', fontSize:11}}>TỔNG</th>
-          </tr>
-          <tr>
-            <th style={{top: 41}}>NHÂN VIÊN</th>
-            {days.map(d => <th key={d} style={{top: 41}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}
-            <th style={{top:41,color:'green'}}>X</th><th style={{top:41,color:'#a16207'}}>P</th><th style={{top:41,color:'red'}}>KP</th>
-          </tr>
+          <tr><th style={{height: 35}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', fontSize:11}}>TỔNG</th></tr>
+          <tr><th style={{top: 41}}>NHÂN VIÊN</th>{days.map(d => <th key={d} style={{top: 41}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}<th style={{top:41,color:'green'}}>X</th><th style={{top:41,color:'#a16207'}}>P</th><th style={{top:41,color:'red'}}>KP</th></tr>
         </thead>
         <tbody>
           {employees.map(emp => {
@@ -169,9 +174,7 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
   );
 };
 
-// --- MAIN SCREENS ---
-// --- TRANG: KHOA (Đã nâng cấp Tìm kiếm & Chấm nhanh) ---
-// --- TRANG: KHOA (Update Khóa sổ & Sắp xếp) ---
+// --- SCREENS ---
 const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
@@ -181,132 +184,73 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [modal, setModal] = useState({ isOpen: false, emp: null, day: null });
-
-  // STATE MỚI
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // 'name' hoặc 'position'
-
-  // --- HÀM KIỂM TRA KHÓA SỔ (Logic ngày 2) ---
-  const checkIsLocked = (month, year) => {
-    const today = new Date();
-    // Tạo mốc thời gian chốt: Ngày 2 của tháng tiếp theo
-    // Ví dụ: Xem tháng 1/2026 -> Mốc chốt là 2/2/2026
-    let nextMonth = month + 1;
-    let nextYear = year;
-    if (nextMonth > 12) { nextMonth = 1; nextYear = year + 1; }
-    
-    const lockDate = new Date(nextYear, nextMonth - 1, 2); // Ngày 2
-    lockDate.setHours(23, 59, 59); // Chốt lúc hết ngày 2
-
-    // Nếu hôm nay đã vượt quá ngày chốt -> KHÓA
-    // (Và dĩ nhiên chỉ khóa các tháng trong quá khứ)
-    const viewingTime = new Date(year, month - 1, 1);
-    const currentTime = new Date();
-    
-    // Nếu đang xem tương lai -> Không khóa (nhưng logic chặn chấm tương lai đã xử lý riêng)
-    // Nếu đang xem quá khứ xa -> Khóa chặt
-    if (currentTime > lockDate) return true;
-    
-    return false;
-  };
-
-  const isLocked = checkIsLocked(viewMonth, viewYear);
+  const [sortBy, setSortBy] = useState('name');
+  
+  // State config
+  const [config, setConfig] = useState({ lockDate: 2, limitHour: 10 });
 
   useEffect(() => {
-    const q = query(collection(db, "employees"), where("dept", "==", userDept));
-    getDocs(q).then(s => {
-      setEmployees(s.docs.map(d => d.data()));
-    });
-    // ... (Các phần fetch dữ liệu khác giữ nguyên)
+    // Load Config
+    getDoc(doc(db, "settings", "config")).then(s => { if(s.exists()) setConfig(s.data()); });
+
+    getDocs(query(collection(db, "employees"), where("dept", "==", userDept))).then(s => setEmployees(s.docs.map(d => d.data())));
     const unsubAtt = onSnapshot(query(collection(db, "attendance"), where("dept", "==", userDept)), (snap) => {
       const d = {}; snap.forEach(doc => { const dt=doc.data(); d[`${dt.empId}_${dt.day}_${dt.month}_${dt.year}`] = dt.status; }); setAttendance(d);
     });
     const unsubPend = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "PENDING")), (snap) => {
         setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
     });
-    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "APPROVED")), (snap) => setNotifications(snap.docs.map(d => d.data())));
+    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "in", ["APPROVED", "REJECTED"]), where("isRead", "==", false)), (snap) => setNotifications(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => { unsubAtt(); unsubPend(); unsubNotif(); };
   }, [userDept]);
 
-  // LOGIC SẮP XẾP & LỌC
-  const getSortedAndFilteredEmployees = () => {
-    // 1. Lọc
-    let result = employees.filter(emp => 
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      emp.id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    // 2. Sắp xếp
-    result.sort((a, b) => {
-      if (sortBy === 'name') {
-        // Tên A-Z
-        const nameA = a.name.split(' ').pop(); // Lấy tên cuối
-        const nameB = b.name.split(' ').pop();
-        return nameA.localeCompare(nameB);
-      } else {
-        // Chức vụ (Priority)
-        const priority = { "Trưởng Khoa": 1, "Phó Khoa": 2, "Bác sĩ": 3, "Điều dưỡng": 4, "Y tá": 5 };
-        const pA = priority[a.position] || 99; // Nếu không khớp thì cho xuống đáy
-        const pB = priority[b.position] || 99;
-        return pA - pB;
-      }
-    });
-
-    return result;
+  const checkIsLocked = (month, year) => {
+    const nextYear = month === 12 ? year + 1 : year; const nextMonth = month === 12 ? 1 : month + 1;
+    const lockDate = new Date(nextYear, nextMonth - 1, config.lockDate); lockDate.setHours(23, 59, 59);
+    return new Date() > lockDate;
   };
+  const isLocked = checkIsLocked(viewMonth, viewYear);
+  const finalEmployees = sortEmployees(employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase())), sortBy);
 
-  const finalEmployees = getSortedAndFilteredEmployees();
-
-  // Xử lý chấm công (Có thêm check khóa sổ)
   const handleCellClick = (emp, day, currentStatus) => {
-    if (isLocked) return alert("❌ Kỳ công tháng này đã chốt sổ (Sau ngày 2 tháng sau). Không thể chỉnh sửa!");
-    
+    if (isLocked) return alert(`❌ Đã khóa sổ (Sau ngày ${config.lockDate})!`);
     const selDate = new Date(viewYear, viewMonth-1, day); const today = new Date(); today.setHours(0,0,0,0);
     if (selDate > today) return alert("Không chấm công tương lai!");
     
-    // Logic khóa 10h sáng
-    const isLockedTime = selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= 10);
-    
-    if (isLockedTime) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
+    // Dùng config.limitHour
+    if (selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= config.limitHour)) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
     else {
       let next = currentStatus === 'X' ? 'P' : (currentStatus === 'P' ? 'KP' : (currentStatus === 'KP' ? '-' : 'X'));
       setDoc(doc(db, "attendance", `${emp.id}_${day}_${viewMonth}_${viewYear}`), { empId: emp.id, day, month: viewMonth, year: viewYear, dept: emp.dept, status: next });
     }
   };
 
-  // Chấm nhanh (Block nếu đã khóa sổ)
-  const handleBulkAttendance = async () => {
-    if (isLocked) return alert("Đã khóa sổ tháng này!");
-    const today = new Date();
-    if (viewMonth !== today.getMonth() + 1) return alert("Chỉ chấm nhanh tháng hiện tại!");
-    const hour = today.getHours(); if (hour >= 10) return alert("Quá 10h sáng!");
-
-    if (!confirm(`Chấm tất cả đi làm hôm nay?`)) return;
-    const day = today.getDate();
-    const batchPromises = finalEmployees.map(emp => {
+  const handleBulk = async () => {
+    if (isLocked) return alert("Đã khóa sổ!"); 
+    if (new Date().getHours() >= config.limitHour) return alert(`Quá ${config.limitHour}h sáng!`);
+    if (!confirm("Chấm tất cả đi làm?")) return;
+    const day = new Date().getDate();
+    const batch = finalEmployees.map(emp => {
       const key = `${emp.id}_${day}_${viewMonth}_${viewYear}`;
-      if (!attendance[key]) {
-        return setDoc(doc(db, "attendance", key), { empId: emp.id, day, month: viewMonth, year: viewYear, dept: emp.dept, status: 'X' });
-      }
+      if (!attendance[key]) return setDoc(doc(db, "attendance", key), { empId: emp.id, day, month: viewMonth, year: viewYear, dept: emp.dept, status: 'X' });
       return Promise.resolve();
     });
-    await Promise.all(batchPromises); alert("Xong!");
+    await Promise.all(batch); alert("Xong!");
   };
 
-  // ... (submitRequest, handleExport giữ nguyên)
   const submitRequest = async (type, reason) => {
-      if (!reason) return alert("Nhập lý do!");
-      await addDoc(collection(db, "requests"), { empId: modal.emp.id, empName: modal.emp.name, dept: userDept, day: modal.day, month: modal.month, year: modal.year, reason, requestType: type, status: 'PENDING' });
-      alert("Đã gửi yêu cầu!"); setModal({ isOpen: false, emp: null, day: null });
+    await addDoc(collection(db, "requests"), { empId: modal.emp.id, empName: modal.emp.name, dept: userDept, day: modal.day, month: modal.month, year: modal.year, reason, requestType: type, status: 'PENDING', isRead: false });
+    alert("Đã gửi yêu cầu!"); setModal({ isOpen: false, emp: null, day: null });
   };
   const handleExport = () => {
-      const days = getDaysArray(viewMonth, viewYear);
-      const data = employees.map(emp => {
-        const r = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
-        days.forEach(d => { const s = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || '-'; r[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
-        r["Tổng Công"]=X; r["Phép"]=P; r["KP"]=KP; return r;
-      });
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `ChamCong_${userDept}_T${viewMonth}.xlsx`);
+    const days = getDaysArray(viewMonth, viewYear);
+    const data = employees.map(emp => {
+      const r = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
+      days.forEach(d => { const s = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || '-'; r[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
+      r["Tổng Công"]=X; r["Phép"]=P; r["KP"]=KP; return r;
+    });
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `ChamCong_${userDept}_T${viewMonth}.xlsx`);
   }
 
   return (
@@ -316,41 +260,16 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
         <Header title={`Khoa: ${userDept}`} email={userEmail} notifications={notifications} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
           <div className="card">
-            
-            {/* TOOLBAR NÂNG CẤP */}
             <div className="toolbar">
-              <div className="search-box">
-                <span className="search-icon">🔍</span>
-                <input type="text" className="search-input" placeholder="Tìm tên hoặc mã NV..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-              </div>
-              
-              {/* Sắp xếp */}
-              <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                <option value="name">Sắp xếp: Tên A-Z</option>
-                <option value="position">Sắp xếp: Chức vụ</option>
-              </select>
-
-              {/* Nút chấm nhanh (Ẩn nếu đã khóa) */}
-              {!isLocked && (
-                <button className="btn btn-primary" onClick={handleBulkAttendance} style={{fontSize:13}}>⚡ Chấm nhanh</button>
-              )}
+              <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
+              <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
+              {!isLocked && <button className="btn btn-primary" onClick={handleBulk}>⚡ Chấm nhanh</button>}
             </div>
-
-            {/* Thông báo khóa sổ */}
-            {isLocked && (
-              <div style={{marginBottom: 15}} className="lock-badge">
-                <span className="lock-icon">🔒</span> Tháng này đã khóa sổ (Quá hạn ngày 2). Chỉ được xem.
-              </div>
-            )}
-
+            {isLocked && <div className="lock-badge"><span className="lock-icon">🔒</span> Tháng này đã khóa sổ (Ngày {config.lockDate}).</div>}
             <div className="control-bar">
-              <div className="filter-group">
-                <select className="select-box" value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>Tháng {m}</option>)}</select>
-                <select className="select-box" value={viewYear} onChange={e=>setViewYear(Number(e.target.value))}><option value={2026}>2026</option><option value={2027}>2027</option></select>
-              </div>
-              <button className="btn btn-success" onClick={handleExport}>📥 Excel</button>
+               <div className="filter-group"><select className="select-box" value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>Tháng {m}</option>)}</select><select className="select-box" value={viewYear} onChange={e=>setViewYear(Number(e.target.value))}><option value={2026}>2026</option><option value={2027}>2027</option></select></div>
+               <button className="btn btn-success" onClick={handleExport}>📥 Excel</button>
             </div>
-            
             <AttendanceTable employees={finalEmployees} attendanceData={attendance} onCellClick={handleCellClick} month={viewMonth} year={viewYear} pendingKeys={pendingKeys} />
           </div>
         </div>
@@ -369,6 +288,12 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [selDept, setSelDept] = useState('');
   const [selMonth, setSelMonth] = useState(new Date().getMonth() + 1);
   const [selYear, setSelYear] = useState(new Date().getFullYear());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  
+  // State cho Báo cáo vắng
+  const [absentModalOpen, setAbsentModalOpen] = useState(false);
+  const [absentList, setAbsentList] = useState([]);
 
   useEffect(() => {
     getDocs(collection(db, "employees")).then(snap => {
@@ -383,17 +308,42 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   }, []);
 
   const handleApprove = async (req) => {
+    if(!confirm(`Duyệt cho ${req.empName} sửa thành ${req.requestType}?`)) return;
     await updateDoc(doc(db, "requests", req.id), { status: 'APPROVED' });
     await setDoc(doc(db, "attendance", `${req.empId}_${req.day}_${req.month || 1}_${req.year || 2026}`), { empId: req.empId, day: req.day, month: req.month, year: req.year, dept: req.dept, status: req.requestType || 'X' });
     alert("Đã duyệt!");
   };
 
+  const handleReject = async (req) => {
+    const reason = prompt("Lý do từ chối:", "Không hợp lệ"); if(reason === null) return;
+    await updateDoc(doc(db, "requests", req.id), { status: 'REJECTED', rejectReason: reason });
+    alert("Đã từ chối!");
+  };
+
+  const handleShowAbsent = () => {
+    const today = new Date();
+    const d = today.getDate(); const m = today.getMonth()+1; const y = today.getFullYear();
+    const list = [];
+    allEmployees.forEach(emp => {
+      const key = `${emp.id}_${d}_${m}_${y}`;
+      const status = attendance[key];
+      // Vắng mặt nếu status là P, KP, hoặc chưa có dữ liệu (undefined)
+      if (status !== 'X') {
+        list.push({ ...emp, status: status || 'KP' });
+      }
+    });
+    setAbsentList(list);
+    setAbsentModalOpen(true);
+  };
+
+  const finalEmployees = sortEmployees(allEmployees.filter(e => e.dept === selDept && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase()))), sortBy);
+
   const handleExportExcel = () => {
-    const filteredEmps = allEmployees.filter(e => e.dept === selDept); const days = getDaysArray(selMonth, selYear);
-    const data = filteredEmps.map(emp => {
-      const row = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
-      days.forEach(d => { const s = attendance[`${emp.id}_${d}_${selMonth}_${selYear}`] || '-'; row[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
-      row["Tổng Công"]=X; row["Phép"]=P; row["KP"]=KP; return row;
+    const days = getDaysArray(selMonth, selYear);
+    const data = finalEmployees.map(emp => {
+      const r = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
+      days.forEach(d => { const s = attendance[`${emp.id}_${d}_${selMonth}_${selYear}`] || '-'; r[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
+      r["Tổng Công"]=X; r["Phép"]=P; r["KP"]=KP; return r;
     });
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `CC_${selDept}_T${selMonth}.xlsx`);
   };
@@ -404,13 +354,32 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
       <div className="main-content">
         <Header title="Giám Đốc" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
-          {requests.length > 0 && (<div className="card" style={{borderLeft:'5px solid #2563eb'}}><h3>📝 Chờ duyệt ({requests.length})</h3><div style={{maxHeight: 200, overflow:'auto'}}><table className="matrix-table"><thead><tr><th>Khoa</th><th>NV</th><th>Ngày</th><th>Xin đổi</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody>{requests.map(req => (<tr key={req.id}><td>{req.dept}</td><td>{req.empName}</td><td>{req.day}/{req.month}</td><td style={{fontWeight:'bold', color: req.requestType==='KP'?'red':'green'}}>{req.requestType}</td><td>{req.reason}</td><td><button className="btn btn-success" onClick={()=>handleApprove(req)}>Duyệt</button></td></tr>))}</tbody></table></div></div>)}
+          <div style={{marginBottom: 20}}>
+            <button className="btn btn-primary" style={{padding:'12px 20px', fontSize:14}} onClick={handleShowAbsent}>📉 Báo cáo vắng hôm nay</button>
+          </div>
+
+          {requests.length > 0 && (
+            <div className="card" style={{borderLeft:'5px solid #2563eb'}}>
+              <h3>📝 Yêu cầu chờ duyệt ({requests.length})</h3>
+              <div style={{overflowX: 'auto'}}>
+                <table className="request-table">
+                  <thead><tr><th>Khoa</th><th>Nhân viên</th><th>Ngày</th><th>Xin đổi</th><th>Lý do</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
+                  <tbody>{requests.map(req => (<tr key={req.id}><td data-label="Khoa">{req.dept}</td><td data-label="NV">{req.empName}</td><td data-label="Ngày">{req.day}/{req.month}</td><td data-label="Đổi thành" style={{fontWeight:'bold', color:req.requestType==='KP'?'red':'green'}}>{req.requestType}</td><td data-label="Lý do">{req.reason}</td><td data-label="Thao tác" style={{textAlign:'right'}}><button className="btn btn-success" style={{marginRight:5}} onClick={()=>handleApprove(req)}>Duyệt</button><button className="btn btn-danger" onClick={()=>handleReject(req)}>Từ chối</button></td></tr>))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <div className="card">
-            <div className="control-bar"><div className="filter-group"><select className="select-box" value={selDept} onChange={e=>setSelDept(e.target.value)}>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select><select className="select-box" value={selMonth} onChange={e=>setSelMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>{m}</option>)}</select></div><button className="btn btn-success" onClick={handleExportExcel}>📥 Excel</button></div>
-            <AttendanceTable employees={allEmployees.filter(e => e.dept === selDept)} attendanceData={attendance} month={selMonth} year={selYear} />
+            <div className="toolbar">
+              <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm trong khoa..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
+              <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
+            </div>
+            <div className="control-bar"><div className="filter-group"><label>Khoa:</label><select className="select-box" value={selDept} onChange={e=>setSelDept(e.target.value)}>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select><label>Tháng:</label><select className="select-box" value={selMonth} onChange={e=>setSelMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>{m}</option>)}</select></div><button className="btn btn-success" onClick={handleExportExcel}>📥 Excel</button></div>
+            <AttendanceTable employees={finalEmployees} attendanceData={attendance} month={selMonth} year={selYear} />
           </div>
         </div>
       </div>
+      <AbsentReportModal isOpen={absentModalOpen} onClose={()=>setAbsentModalOpen(false)} absentList={absentList} />
     </div>
   );
 };
@@ -420,20 +389,65 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [activeTab, setActiveTab] = useState('employees');
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]); 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  
+  // Config state
+  const [config, setConfig] = useState({ lockDate: 2, limitHour: 10 });
+  
+  // Data for Backup
+  const [backupData, setBackupData] = useState(null);
 
   useEffect(() => {
+    // Fetch Config
+    const unsubConf = onSnapshot(doc(db, "settings", "config"), (doc) => {
+       if (doc.exists()) setConfig(doc.data());
+       else setDoc(doc.ref, { lockDate: 2, limitHour: 10 }); // Create default if not exists
+    });
     const unsubEmp = onSnapshot(collection(db, "employees"), (snap) => setEmployees(snap.docs.map(d => d.data())));
     const unsubAcc = onSnapshot(collection(db, "users"), (snap) => setAccounts(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    return () => { unsubEmp(); unsubAcc(); }
+    return () => { unsubEmp(); unsubAcc(); unsubConf(); }
   }, []);
+
+  const handleUpdateConfig = async () => {
+    await setDoc(doc(db, "settings", "config"), config);
+    alert("Cập nhật cấu hình thành công!");
+  };
+
+  const handleBackup = async () => {
+    alert("Đang tải dữ liệu backup...");
+    // Fetch all collections
+    const empSnap = await getDocs(collection(db, "employees"));
+    const attSnap = await getDocs(collection(db, "attendance"));
+    const reqSnap = await getDocs(collection(db, "requests"));
+    const userSnap = await getDocs(collection(db, "users"));
+
+    const data = {
+      employees: empSnap.docs.map(d => d.data()),
+      attendance: attSnap.docs.map(d => d.data()),
+      requests: reqSnap.docs.map(d => d.data()),
+      users: userSnap.docs.map(d => d.data()),
+      settings: config,
+      backupDate: new Date().toISOString()
+    };
+    
+    // Create download file
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_hospital_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0]; if(!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
       const data = XLSX.utils.sheet_to_json(XLSX.read(evt.target.result, { type: 'binary' }).Sheets[XLSX.read(evt.target.result, { type: 'binary' }).SheetNames[0]]);
-      const existingIds = employees.map(e => e.id);
-      let count = 0;
+      const existingIds = employees.map(e => e.id); let count = 0;
       for (let row of data) {
         if (!row.MaNV || existingIds.includes(String(row.MaNV))) continue;
         await setDoc(doc(db, "employees", String(row.MaNV)), { id: String(row.MaNV), name: row.TenNV, dept: row.Khoa, position: row.ChucVu });
@@ -443,29 +457,61 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     };
     reader.readAsBinaryString(file); e.target.value = null;
   };
-
   const handleDelete = async (id) => { if(confirm("Xóa nhân viên này?")) await deleteDoc(doc(db, "employees", id)); };
+  const finalEmployees = sortEmployees(employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase()) || e.dept.toLowerCase().includes(searchTerm.toLowerCase())), sortBy);
 
   return (
     <div className="app-container">
       <Sidebar userRole="ADMIN" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        <Header title="Admin" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} />
+        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
           <div style={{marginBottom:15, display:'flex', gap:10}}>
              <button className={`btn ${activeTab==='employees'?'btn-primary':''}`} onClick={()=>setActiveTab('employees')} style={{background:activeTab!=='employees'?'#fff':''}}>Nhân viên</button>
              <button className={`btn ${activeTab==='accounts'?'btn-primary':''}`} onClick={()=>setActiveTab('accounts')} style={{background:activeTab!=='accounts'?'#fff':''}}>Tài khoản</button>
+             <button className={`btn ${activeTab==='config'?'btn-primary':''}`} onClick={()=>setActiveTab('config')} style={{background:activeTab!=='config'?'#fff':''}}>Cấu hình & Backup</button>
           </div>
           
-          {activeTab === 'employees' && (
+          {activeTab === 'config' && (
             <div className="card">
-              <div className="control-bar"><h3>Nhân viên ({employees.length})</h3><label className="btn btn-primary">📂 Import<input type="file" hidden onChange={handleFileUpload} /></label></div>
-              <div style={{maxHeight:'60vh', overflow:'auto'}}><table className="matrix-table" style={{width:'100%'}}><thead><tr><th>Mã</th><th>Tên</th><th>Khoa</th><th>Xóa</th></tr></thead><tbody>{employees.map(e => (<tr key={e.id}><td>{e.id}</td><td style={{textAlign:'left', paddingLeft:10}}>{e.name}</td><td>{e.dept}</td><td><button className="btn btn-logout" style={{padding:'5px 10px'}} onClick={()=>handleDelete(e.id)}>X</button></td></tr>))}</tbody></table></div>
+              <h3>⚙️ Cấu hình hệ thống</h3>
+              <div className="config-panel">
+                <div className="config-row">
+                  <label>Giờ giới hạn sáng (h):</label>
+                  <input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} />
+                  <span style={{fontSize:13, color:'#666'}}>(Sau giờ này nhân viên không được tự chấm)</span>
+                </div>
+                <div className="config-row">
+                  <label>Ngày khóa sổ (DL):</label>
+                  <input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} />
+                  <span style={{fontSize:13, color:'#666'}}>(Ngày của tháng sau sẽ khóa tháng trước)</span>
+                </div>
+                <button className="btn btn-success" onClick={handleUpdateConfig} style={{marginTop:10}}>Lưu Cấu Hình</button>
+              </div>
+
+              <h3>💾 Sao lưu dữ liệu</h3>
+              <p style={{fontSize:13, color:'#666'}}>Tải toàn bộ dữ liệu (Nhân viên, Chấm công, Tài khoản) về máy tính để dự phòng.</p>
+              <button className="btn btn-primary" onClick={handleBackup}>⬇️ Tải Backup JSON</button>
             </div>
           )}
 
+          {activeTab === 'employees' && (
+            <div className="card">
+              <div className="toolbar">
+                 <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm tên, mã, hoặc khoa..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
+                 <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
+                 <label className="btn btn-primary" style={{cursor:'pointer', marginLeft:'auto'}}>📂 Import Excel<input type="file" hidden onChange={handleFileUpload} /></label>
+              </div>
+              <div style={{maxHeight:'60vh', overflow:'auto'}}>
+                <table className="request-table">
+                  <thead><tr><th>Mã</th><th>Tên</th><th>Khoa</th><th>Chức Vụ</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
+                  <tbody>{finalEmployees.map(e => (<tr key={e.id}><td>{e.id}</td><td>{e.name}</td><td>{e.dept}</td><td>{e.position}</td><td style={{textAlign:'right'}}><button className="btn btn-logout" onClick={()=>handleDelete(e.id)}>Xóa</button></td></tr>))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
           {activeTab === 'accounts' && (
-            <div className="card"><h3>Tài khoản hệ thống ({accounts.length})</h3><table className="matrix-table" style={{width:'100%', marginTop:10}}><thead><tr><th>UID</th><th>Quyền</th><th>Khoa</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td style={{fontSize:11, color:'#888'}}>{a.id}</td><td><span style={{fontWeight:'bold', color:a.role==='ADMIN'?'red':'blue'}}>{a.role}</span></td><td>{a.dept||'-'}</td></tr>))}</tbody></table></div>
+            <div className="card"><h3>Tài khoản hệ thống ({accounts.length})</h3><table className="request-table" style={{marginTop:10}}><thead><tr><th>UID</th><th>Quyền</th><th>Khoa</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td style={{color:'#888'}}>{a.id}</td><td><span style={{fontWeight:'bold', color:a.role==='ADMIN'?'red':'blue'}}>{a.role}</span></td><td>{a.dept||'-'}</td></tr>))}</tbody></table></div>
           )}
         </div>
       </div>
@@ -473,7 +519,6 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   );
 };
 
-// --- APP ROOT ---
 function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
@@ -501,8 +546,7 @@ function App() {
         </div>
     );
   }
-
-  if (!userData) return <div style={{padding:20, textAlign:'center'}}>Loading...</div>;
+  if (!userData) return <div className="loading-screen">⏳ Đang tải dữ liệu...</div>;
 
   return (
     <>
