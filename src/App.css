@@ -1,6 +1,19 @@
 /* Thêm vào src/App.css */
 
 /* Thanh công cụ tìm kiếm & lọc */
+.toolbar {
+  display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;
+  background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;
+}
+.search-box {
+  flex: 1; min-width: 200px; position: relative;
+}
+.search-input {
+  width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none;
+}
+.search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8;
+}
 /* Thêm vào src/App.css (hoặc dán đè phần .toolbar cũ) */
 
 .toolbar {
