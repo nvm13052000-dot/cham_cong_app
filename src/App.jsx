@@ -170,8 +170,10 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
 };
 
 // --- MAIN SCREENS ---
+// --- TRANG: KHOA (Đã nâng cấp Tìm kiếm & Chấm nhanh) ---
+// --- TRANG: KHOA (Update Khóa sổ & Sắp xếp) ---
 const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile Menu State
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [pendingKeys, setPendingKeys] = useState([]); 
@@ -180,43 +182,131 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [modal, setModal] = useState({ isOpen: false, emp: null, day: null });
 
+  // STATE MỚI
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name'); // 'name' hoặc 'position'
+
+  // --- HÀM KIỂM TRA KHÓA SỔ (Logic ngày 2) ---
+  const checkIsLocked = (month, year) => {
+    const today = new Date();
+    // Tạo mốc thời gian chốt: Ngày 2 của tháng tiếp theo
+    // Ví dụ: Xem tháng 1/2026 -> Mốc chốt là 2/2/2026
+    let nextMonth = month + 1;
+    let nextYear = year;
+    if (nextMonth > 12) { nextMonth = 1; nextYear = year + 1; }
+    
+    const lockDate = new Date(nextYear, nextMonth - 1, 2); // Ngày 2
+    lockDate.setHours(23, 59, 59); // Chốt lúc hết ngày 2
+
+    // Nếu hôm nay đã vượt quá ngày chốt -> KHÓA
+    // (Và dĩ nhiên chỉ khóa các tháng trong quá khứ)
+    const viewingTime = new Date(year, month - 1, 1);
+    const currentTime = new Date();
+    
+    // Nếu đang xem tương lai -> Không khóa (nhưng logic chặn chấm tương lai đã xử lý riêng)
+    // Nếu đang xem quá khứ xa -> Khóa chặt
+    if (currentTime > lockDate) return true;
+    
+    return false;
+  };
+
+  const isLocked = checkIsLocked(viewMonth, viewYear);
+
   useEffect(() => {
-    getDocs(query(collection(db, "employees"), where("dept", "==", userDept))).then(s => setEmployees(s.docs.map(d => d.data())));
+    const q = query(collection(db, "employees"), where("dept", "==", userDept));
+    getDocs(q).then(s => {
+      setEmployees(s.docs.map(d => d.data()));
+    });
+    // ... (Các phần fetch dữ liệu khác giữ nguyên)
     const unsubAtt = onSnapshot(query(collection(db, "attendance"), where("dept", "==", userDept)), (snap) => {
       const d = {}; snap.forEach(doc => { const dt=doc.data(); d[`${dt.empId}_${dt.day}_${dt.month}_${dt.year}`] = dt.status; }); setAttendance(d);
     });
     const unsubPend = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "PENDING")), (snap) => {
-      setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
+        setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
     });
     const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "APPROVED")), (snap) => setNotifications(snap.docs.map(d => d.data())));
-    return () => { unsubAtt(); unsubNotif(); unsubPend(); };
+    return () => { unsubAtt(); unsubPend(); unsubNotif(); };
   }, [userDept]);
 
+  // LOGIC SẮP XẾP & LỌC
+  const getSortedAndFilteredEmployees = () => {
+    // 1. Lọc
+    let result = employees.filter(emp => 
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      emp.id.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // 2. Sắp xếp
+    result.sort((a, b) => {
+      if (sortBy === 'name') {
+        // Tên A-Z
+        const nameA = a.name.split(' ').pop(); // Lấy tên cuối
+        const nameB = b.name.split(' ').pop();
+        return nameA.localeCompare(nameB);
+      } else {
+        // Chức vụ (Priority)
+        const priority = { "Trưởng Khoa": 1, "Phó Khoa": 2, "Bác sĩ": 3, "Điều dưỡng": 4, "Y tá": 5 };
+        const pA = priority[a.position] || 99; // Nếu không khớp thì cho xuống đáy
+        const pB = priority[b.position] || 99;
+        return pA - pB;
+      }
+    });
+
+    return result;
+  };
+
+  const finalEmployees = getSortedAndFilteredEmployees();
+
+  // Xử lý chấm công (Có thêm check khóa sổ)
   const handleCellClick = (emp, day, currentStatus) => {
+    if (isLocked) return alert("❌ Kỳ công tháng này đã chốt sổ (Sau ngày 2 tháng sau). Không thể chỉnh sửa!");
+    
     const selDate = new Date(viewYear, viewMonth-1, day); const today = new Date(); today.setHours(0,0,0,0);
     if (selDate > today) return alert("Không chấm công tương lai!");
-    const isLocked = selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= 10);
-    if (isLocked) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
+    
+    // Logic khóa 10h sáng
+    const isLockedTime = selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= 10);
+    
+    if (isLockedTime) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
     else {
       let next = currentStatus === 'X' ? 'P' : (currentStatus === 'P' ? 'KP' : (currentStatus === 'KP' ? '-' : 'X'));
       setDoc(doc(db, "attendance", `${emp.id}_${day}_${viewMonth}_${viewYear}`), { empId: emp.id, day, month: viewMonth, year: viewYear, dept: emp.dept, status: next });
     }
   };
 
-  const submitRequest = async (type, reason) => {
-    if (!reason) return alert("Nhập lý do!");
-    await addDoc(collection(db, "requests"), { empId: modal.emp.id, empName: modal.emp.name, dept: userDept, day: modal.day, month: modal.month, year: modal.year, reason, requestType: type, status: 'PENDING' });
-    alert("Đã gửi yêu cầu!"); setModal({ isOpen: false, emp: null, day: null });
+  // Chấm nhanh (Block nếu đã khóa sổ)
+  const handleBulkAttendance = async () => {
+    if (isLocked) return alert("Đã khóa sổ tháng này!");
+    const today = new Date();
+    if (viewMonth !== today.getMonth() + 1) return alert("Chỉ chấm nhanh tháng hiện tại!");
+    const hour = today.getHours(); if (hour >= 10) return alert("Quá 10h sáng!");
+
+    if (!confirm(`Chấm tất cả đi làm hôm nay?`)) return;
+    const day = today.getDate();
+    const batchPromises = finalEmployees.map(emp => {
+      const key = `${emp.id}_${day}_${viewMonth}_${viewYear}`;
+      if (!attendance[key]) {
+        return setDoc(doc(db, "attendance", key), { empId: emp.id, day, month: viewMonth, year: viewYear, dept: emp.dept, status: 'X' });
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(batchPromises); alert("Xong!");
   };
 
+  // ... (submitRequest, handleExport giữ nguyên)
+  const submitRequest = async (type, reason) => {
+      if (!reason) return alert("Nhập lý do!");
+      await addDoc(collection(db, "requests"), { empId: modal.emp.id, empName: modal.emp.name, dept: userDept, day: modal.day, month: modal.month, year: modal.year, reason, requestType: type, status: 'PENDING' });
+      alert("Đã gửi yêu cầu!"); setModal({ isOpen: false, emp: null, day: null });
+  };
   const handleExport = () => {
-    const days = getDaysArray(viewMonth, viewYear);
-    const data = employees.map(emp => {
-      const r = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
-      days.forEach(d => { const s = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || '-'; r[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
-      r["Tổng Công"]=X; r["Phép"]=P; r["KP"]=KP; return r;
-    });
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `ChamCong_${userDept}_T${viewMonth}.xlsx`);
+      const days = getDaysArray(viewMonth, viewYear);
+      const data = employees.map(emp => {
+        const r = { "Mã NV": emp.id, "Tên NV": emp.name }; let X=0, P=0, KP=0;
+        days.forEach(d => { const s = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || '-'; r[`Ngày ${d}`] = s; if(s==='X') X++; if(s==='P') P++; if(s==='KP') KP++; });
+        r["Tổng Công"]=X; r["Phép"]=P; r["KP"]=KP; return r;
+      });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `ChamCong_${userDept}_T${viewMonth}.xlsx`);
   }
 
   return (
@@ -226,6 +316,33 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
         <Header title={`Khoa: ${userDept}`} email={userEmail} notifications={notifications} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
           <div className="card">
+            
+            {/* TOOLBAR NÂNG CẤP */}
+            <div className="toolbar">
+              <div className="search-box">
+                <span className="search-icon">🔍</span>
+                <input type="text" className="search-input" placeholder="Tìm tên hoặc mã NV..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              </div>
+              
+              {/* Sắp xếp */}
+              <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="name">Sắp xếp: Tên A-Z</option>
+                <option value="position">Sắp xếp: Chức vụ</option>
+              </select>
+
+              {/* Nút chấm nhanh (Ẩn nếu đã khóa) */}
+              {!isLocked && (
+                <button className="btn btn-primary" onClick={handleBulkAttendance} style={{fontSize:13}}>⚡ Chấm nhanh</button>
+              )}
+            </div>
+
+            {/* Thông báo khóa sổ */}
+            {isLocked && (
+              <div style={{marginBottom: 15}} className="lock-badge">
+                <span className="lock-icon">🔒</span> Tháng này đã khóa sổ (Quá hạn ngày 2). Chỉ được xem.
+              </div>
+            )}
+
             <div className="control-bar">
               <div className="filter-group">
                 <select className="select-box" value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>Tháng {m}</option>)}</select>
@@ -233,7 +350,8 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
               </div>
               <button className="btn btn-success" onClick={handleExport}>📥 Excel</button>
             </div>
-            <AttendanceTable employees={employees} attendanceData={attendance} onCellClick={handleCellClick} month={viewMonth} year={viewYear} pendingKeys={pendingKeys} />
+            
+            <AttendanceTable employees={finalEmployees} attendanceData={attendance} onCellClick={handleCellClick} month={viewMonth} year={viewYear} pendingKeys={pendingKeys} />
           </div>
         </div>
       </div>

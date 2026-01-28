@@ -1,90 +1,34 @@
-/* File: src/App.css */
-body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f4f6f9; overflow: hidden; }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; } /* Bỏ highlight khi chạm trên mobile */
+/* Thêm vào src/App.css */
 
-/* Layout Chính */
-.app-container { display: flex; height: 100vh; width: 100vw; position: relative; }
+/* Thanh công cụ tìm kiếm & lọc */
+/* Thêm vào src/App.css (hoặc dán đè phần .toolbar cũ) */
 
-/* SIDEBAR (Menu Trái) */
-.sidebar { width: 260px; background: #fff; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; z-index: 50; transition: transform 0.3s ease; }
-.sidebar-header { padding: 20px; font-size: 18px; font-weight: bold; color: #1e293b; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
-.menu-item { padding: 16px 20px; cursor: pointer; color: #64748b; display: flex; align-items: center; gap: 12px; font-weight: 500; font-size: 15px; }
-.menu-item:hover, .menu-item.active { background: #eef2f7; color: #007bff; border-right: 4px solid #007bff; }
+.toolbar {
+  display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;
+  background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; align-items: center;
+}
+.search-box { flex: 2; min-width: 200px; position: relative; }
 
-/* MAIN CONTENT */
-.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f8fafc; width: 100%; }
-.top-header { background: #fff; padding: 10px 20px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; height: 60px; z-index: 40; }
+/* Thông báo khóa sổ */
+.lock-badge {
+  background: #fee2e2; color: #b91c1c; padding: 8px 12px; border-radius: 6px; 
+  font-weight: bold; font-size: 13px; display: flex; align-items: center; gap: 6px; border: 1px solid #fecaca;
+}
+.lock-icon { font-size: 16px; }
 
-/* Dashboard Content */
-.dashboard-content { padding: 15px; flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-.card { background: #fff; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); padding: 15px; margin-bottom: 20px; }
-.control-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-.filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.select-box { padding: 10px; border-radius: 6px; border: 1px solid #ddd; outline: none; bg: white; font-size: 14px; }
-
-/* BẢNG CHẤM CÔNG (Matrix) */
-.matrix-wrapper { overflow: auto; max-height: calc(100vh - 220px); border: 1px solid #e2e8f0; border-radius: 8px; position: relative; }
-table.matrix-table { border-collapse: separate; border-spacing: 0; font-size: 13px; }
-
-/* Cố định Header bảng */
-.matrix-table thead { position: sticky; top: 0; z-index: 20; }
-.matrix-table th { background: #f8fafc; color: #475569; padding: 10px 5px; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #e2e8f0; text-align: center; height: 40px; }
-.th-day-name { font-size: 11px; color: #64748b; font-weight: normal; border-bottom: none !important; }
-.th-date-num { font-weight: bold; font-size: 13px; border-top: none !important; }
-
-/* Cố định Cột Tên NV (Sticky Left) */
-.matrix-table td:first-child, .matrix-table th:first-child { position: sticky; left: 0; background: #fff; z-index: 30; text-align: left; padding-left: 10px; border-right: 2px solid #e2e8f0; font-weight: 600; min-width: 140px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.matrix-table thead th:first-child { z-index: 40; background: #f1f5f9; }
-
-.matrix-table td { padding: 0; text-align: center; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; height: 45px; min-width: 40px; } /* Ô to hơn để dễ bấm */
-
-/* Màu sắc trạng thái */
-.bg-weekend { background-color: #fce7f3 !important; color: #be185d; }
-.cell-work { background-color: #dcfce7; color: #15803d; font-weight: bold; }
-.cell-leave { background-color: #fef9c3; color: #a16207; font-weight: bold; }
-.cell-kp { background-color: #fee2e2; color: #b91c1c; font-weight: bold; }
-.cell-pending { opacity: 0.6; background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, #ddd 5px, #ddd 10px); }
-
-/* Components */
-.btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; }
-.btn-primary { background: #2563eb; color: white; }
-.btn-success { background: #10b981; color: white; }
-.btn-logout { background: #fee2e2; color: #ef4444; }
-.menu-btn { display: none; font-size: 24px; background: none; border: none; cursor: pointer; padding: 5px; color: #333; }
-
-/* Notification */
-.notification-container { position: relative; }
-.notification-bell { padding: 8px; font-size: 22px; margin-right: 10px; position: relative; }
-.badge { position: absolute; top: 0; right: 0; background: red; color: white; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
-.notification-dropdown { position: absolute; top: 110%; right: -10px; width: 300px; background: white; border: 1px solid #eee; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border-radius: 12px; z-index: 100; padding: 0; max-height: 400px; overflow-y: auto; }
-.notif-item { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-
-/* Modal Responsive */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
-.modal-content { background: white; padding: 25px; border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: slideUp 0.3s ease; }
-.form-group { margin-bottom: 15px; }
-.form-group label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #334155; }
-.login-input { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; }
-
-/* MOBILE RESPONSIVE (@media) */
-@media (max-width: 768px) {
-  .sidebar { position: fixed; top: 0; left: -100%; height: 100%; width: 280px; box-shadow: 5px 0 15px rgba(0,0,0,0.1); }
-  .sidebar.open { left: 0; transform: translateX(0); }
-  .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 45; }
-  
-  .menu-btn { display: block; } /* Hiện nút Hamburger */
-  .top-header { padding: 10px 15px; }
-  .top-header h2 { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-  
-  .control-bar { flex-direction: column; align-items: stretch; }
-  .filter-group { flex-direction: column; align-items: stretch; }
-  .select-box, .btn { width: 100%; }
-  
-  .matrix-wrapper { max-height: calc(100vh - 280px); }
-  .matrix-table td, .matrix-table th { font-size: 12px; }
-  
-  /* Login Mobile */
-  .login-card { padding: 25px; width: 90%; }
+/* Dropdown sắp xếp */
+.sort-select {
+  padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; outline: none; background: white; cursor: pointer;
 }
 
-@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+/* Nút chấm nhanh */
+.action-group { display: flex; gap: 10px; }
+.btn-outline { background: white; border: 1px solid #cbd5e1; color: #334155; }
+.btn-outline:hover { background: #f1f5f9; }
+
+/* Responsive cho Toolbar */
+@media (max-width: 768px) {
+  .toolbar { flex-direction: column; }
+  .action-group { width: 100%; justify-content: space-between; }
+  .btn { flex: 1; }
+}
