@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { initializeApp, getApp, deleteApp } from "firebase/app";
+// Đã thêm sendPasswordResetEmail vào dòng import
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs, setDoc, addDoc, updateDoc, onSnapshot, deleteDoc, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { auth, db } from './firebase';
@@ -95,29 +97,35 @@ const RequestModal = ({ isOpen, onClose, onSubmit, dateInfo }) => {
   );
 };
 
-// --- MODAL BÁO CÁO VẮNG (MỚI CHO GIAMDOC) ---
-const AbsentReportModal = ({ isOpen, onClose, absentList }) => {
+// --- MODAL BÁO CÁO ---
+const AbsentReportModal = ({ isOpen, onClose, absentList, deptName }) => {
   if (!isOpen) return null;
   return (
     <div className="modal-overlay">
       <div className="modal-content modal-lg">
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:15}}>
-          <h3 style={{margin:0}}>📉 Báo cáo vắng hôm nay ({new Date().getDate()}/{new Date().getMonth()+1})</h3>
-          <button onClick={onClose} style={{background:'none', border:'none', fontSize:20, cursor:'pointer'}}>&times;</button>
+        <div style={{display:'flex', justifyContent:'space-between', marginBottom:15}}>
+          <h3>📉 Báo cáo vắng mặt</h3>
+          <button onClick={onClose} style={{border:'none', background:'none', fontSize:20}}>&times;</button>
         </div>
-        <div style={{maxHeight: 400, overflow:'auto'}}>
-          <table className="request-table">
-            <thead><tr><th>Khoa</th><th>Nhân viên</th><th>Trạng thái</th></tr></thead>
-            <tbody>
-              {absentList.length === 0 ? (<tr><td colSpan={3} style={{textAlign:'center', padding:20}}>Hôm nay đi làm đầy đủ! 🎉</td></tr>) : 
-              absentList.map((item, i) => (
-                <tr key={i}>
-                  <td>{item.dept}</td><td>{item.name}</td>
-                  <td><span className={`status-badge ${item.status==='P'?'badge-p':'badge-kp'}`}>{item.status === 'P' ? 'Nghỉ phép' : 'Chưa chấm / KP'}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{padding:15, background:'white', border:'1px solid #eee'}}>
+           <div className="capture-header" style={{textAlign:'center', marginBottom:20, borderBottom:'2px solid #2563eb', paddingBottom:10}}>
+              <div style={{fontSize:20, fontWeight:'bold', textTransform:'uppercase'}}>BÁO CÁO QUÂN SỐ</div>
+              <div style={{fontWeight:'bold', marginTop:5}}>Khoa: {deptName || 'Toàn viện'}</div>
+              <div style={{fontSize:14, color:'#666'}}>Ngày: {new Date().getDate()}/{new Date().getMonth()+1}/{new Date().getFullYear()}</div>
+           </div>
+           <table className="request-table" style={{width:'100%', borderCollapse:'collapse'}}>
+             <thead><tr style={{background:'#f1f5f9', borderBottom:'2px solid #333'}}><th style={{padding:8, border:'1px solid #ddd'}}>Họ tên</th><th style={{padding:8, border:'1px solid #ddd'}}>Chức vụ</th><th style={{padding:8, border:'1px solid #ddd'}}>Trạng thái</th></tr></thead>
+             <tbody>
+               {absentList.length === 0 ? (<tr><td colSpan={3} style={{textAlign:'center', padding:20}}>Đi làm đầy đủ! 🎉</td></tr>) : 
+               absentList.map((item, i) => (
+                 <tr key={i}>
+                   <td style={{padding:8, border:'1px solid #ddd'}}>{item.name}</td>
+                   <td style={{padding:8, border:'1px solid #ddd'}}>{item.position}</td>
+                   <td style={{padding:8, border:'1px solid #ddd', textAlign:'center', fontWeight:'bold', color: item.status==='P'?'#a16207':'#b91c1c'}}>{item.status === 'P' ? 'Nghỉ phép' : 'Vắng / KP'}</td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
         </div>
       </div>
     </div>
@@ -186,14 +194,10 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   const [modal, setModal] = useState({ isOpen: false, emp: null, day: null });
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  
-  // State config
   const [config, setConfig] = useState({ lockDate: 2, limitHour: 10 });
 
   useEffect(() => {
-    // Load Config
-    getDoc(doc(db, "settings", "config")).then(s => { if(s.exists()) setConfig(s.data()); });
-
+    const unsubConf = onSnapshot(doc(db, "settings", "config"), (doc) => { if (doc.exists()) setConfig(doc.data()); else setDoc(doc.ref, { lockDate: 2, limitHour: 10 }); });
     getDocs(query(collection(db, "employees"), where("dept", "==", userDept))).then(s => setEmployees(s.docs.map(d => d.data())));
     const unsubAtt = onSnapshot(query(collection(db, "attendance"), where("dept", "==", userDept)), (snap) => {
       const d = {}; snap.forEach(doc => { const dt=doc.data(); d[`${dt.empId}_${dt.day}_${dt.month}_${dt.year}`] = dt.status; }); setAttendance(d);
@@ -202,7 +206,7 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
         setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
     });
     const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "in", ["APPROVED", "REJECTED"]), where("isRead", "==", false)), (snap) => setNotifications(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    return () => { unsubAtt(); unsubPend(); unsubNotif(); };
+    return () => { unsubAtt(); unsubPend(); unsubNotif(); unsubConf(); };
   }, [userDept]);
 
   const checkIsLocked = (month, year) => {
@@ -214,11 +218,9 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   const finalEmployees = sortEmployees(employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase())), sortBy);
 
   const handleCellClick = (emp, day, currentStatus) => {
-    if (isLocked) return alert(`❌ Đã khóa sổ (Sau ngày ${config.lockDate})!`);
+    if (isLocked) return alert(`❌ Đã khóa sổ (Ngày ${config.lockDate})!`);
     const selDate = new Date(viewYear, viewMonth-1, day); const today = new Date(); today.setHours(0,0,0,0);
     if (selDate > today) return alert("Không chấm công tương lai!");
-    
-    // Dùng config.limitHour
     if (selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= config.limitHour)) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
     else {
       let next = currentStatus === 'X' ? 'P' : (currentStatus === 'P' ? 'KP' : (currentStatus === 'KP' ? '-' : 'X'));
@@ -267,7 +269,7 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
             </div>
             {isLocked && <div className="lock-badge"><span className="lock-icon">🔒</span> Tháng này đã khóa sổ (Ngày {config.lockDate}).</div>}
             <div className="control-bar">
-               <div className="filter-group"><select className="select-box" value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>Tháng {m}</option>)}</select><select className="select-box" value={viewYear} onChange={e=>setViewYear(Number(e.target.value))}><option value={2026}>2026</option><option value={2027}>2027</option></select></div>
+               <div className="filter-group"><select className="select-box" value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>Tháng {m}</option>)}</select><select className="select-box" value={viewYear} onChange={e=>setViewYear(Number(e.target.value))}>{Array.from({length: 5}, (_, i) => 2026 + i).map(y => <option key={y} value={y}>{y}</option>)}</select></div>
                <button className="btn btn-success" onClick={handleExport}>📥 Excel</button>
             </div>
             <AttendanceTable employees={finalEmployees} attendanceData={attendance} onCellClick={handleCellClick} month={viewMonth} year={viewYear} pendingKeys={pendingKeys} />
@@ -290,8 +292,6 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [selYear, setSelYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  
-  // State cho Báo cáo vắng
   const [absentModalOpen, setAbsentModalOpen] = useState(false);
   const [absentList, setAbsentList] = useState([]);
 
@@ -321,16 +321,12 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   };
 
   const handleShowAbsent = () => {
-    const today = new Date();
-    const d = today.getDate(); const m = today.getMonth()+1; const y = today.getFullYear();
+    const today = new Date(); const d = today.getDate(); const m = today.getMonth()+1; const y = today.getFullYear();
     const list = [];
-    allEmployees.forEach(emp => {
+    const targetEmployees = allEmployees.filter(e => e.dept === selDept);
+    targetEmployees.forEach(emp => {
       const key = `${emp.id}_${d}_${m}_${y}`;
-      const status = attendance[key];
-      // Vắng mặt nếu status là P, KP, hoặc chưa có dữ liệu (undefined)
-      if (status !== 'X') {
-        list.push({ ...emp, status: status || 'KP' });
-      }
+      if (attendance[key] !== 'X') list.push({ ...emp, status: attendance[key] || 'KP' });
     });
     setAbsentList(list);
     setAbsentModalOpen(true);
@@ -355,7 +351,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
         <Header title="Giám Đốc" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
           <div style={{marginBottom: 20}}>
-            <button className="btn btn-primary" style={{padding:'12px 20px', fontSize:14}} onClick={handleShowAbsent}>📉 Báo cáo vắng hôm nay</button>
+            <button className="btn btn-primary" onClick={handleShowAbsent}>📉 Xem vắng hôm nay</button>
           </div>
 
           {requests.length > 0 && (
@@ -379,11 +375,12 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           </div>
         </div>
       </div>
-      <AbsentReportModal isOpen={absentModalOpen} onClose={()=>setAbsentModalOpen(false)} absentList={absentList} />
+      <AbsentReportModal isOpen={absentModalOpen} onClose={()=>setAbsentModalOpen(false)} absentList={absentList} deptName={selDept} />
     </div>
   );
 };
 
+// --- SCREEN 3: ADMIN (Đã thêm lại nút Reset Pass) ---
 const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('employees');
@@ -391,55 +388,50 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [accounts, setAccounts] = useState([]); 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  
-  // Config state
   const [config, setConfig] = useState({ lockDate: 2, limitHour: 10 });
-  
-  // Data for Backup
-  const [backupData, setBackupData] = useState(null);
+  const [newAcc, setNewAcc] = useState({ email: '', pass: '', role: 'KHOA', dept: '' });
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    // Fetch Config
-    const unsubConf = onSnapshot(doc(db, "settings", "config"), (doc) => {
-       if (doc.exists()) setConfig(doc.data());
-       else setDoc(doc.ref, { lockDate: 2, limitHour: 10 }); // Create default if not exists
-    });
+    const unsubConf = onSnapshot(doc(db, "settings", "config"), (doc) => { if (doc.exists()) setConfig(doc.data()); else setDoc(doc.ref, { lockDate: 2, limitHour: 10 }); });
     const unsubEmp = onSnapshot(collection(db, "employees"), (snap) => setEmployees(snap.docs.map(d => d.data())));
     const unsubAcc = onSnapshot(collection(db, "users"), (snap) => setAccounts(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => { unsubEmp(); unsubAcc(); unsubConf(); }
   }, []);
 
-  const handleUpdateConfig = async () => {
-    await setDoc(doc(db, "settings", "config"), config);
-    alert("Cập nhật cấu hình thành công!");
+  // --- HÀM GỬI EMAIL RESET (DÀNH CHO MAIL THẬT) ---
+  const handleResetPassword = async (email) => {
+    if (!confirm(`Gửi email đặt lại mật khẩu cho ${email}?`)) return;
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("✅ Đã gửi email thành công! Vui lòng kiểm tra hộp thư.");
+    } catch (error) {
+      alert("Lỗi: " + error.message);
+    }
   };
 
+  const handleUpdateConfig = async () => { await setDoc(doc(db, "settings", "config"), config); alert("Cập nhật cấu hình thành công!"); };
   const handleBackup = async () => {
     alert("Đang tải dữ liệu backup...");
-    // Fetch all collections
     const empSnap = await getDocs(collection(db, "employees"));
     const attSnap = await getDocs(collection(db, "attendance"));
     const reqSnap = await getDocs(collection(db, "requests"));
     const userSnap = await getDocs(collection(db, "users"));
-
-    const data = {
-      employees: empSnap.docs.map(d => d.data()),
-      attendance: attSnap.docs.map(d => d.data()),
-      requests: reqSnap.docs.map(d => d.data()),
-      users: userSnap.docs.map(d => d.data()),
-      settings: config,
-      backupDate: new Date().toISOString()
-    };
-    
-    // Create download file
+    const data = { employees: empSnap.docs.map(d => d.data()), attendance: attSnap.docs.map(d => d.data()), requests: reqSnap.docs.map(d => d.data()), users: userSnap.docs.map(d => d.data()), settings: config, backupDate: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `backup_hospital_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `backup_hospital_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const handleCreateAccount = async (e) => {
+    e.preventDefault(); if (newAcc.role === 'KHOA' && !newAcc.dept) return alert("Vui lòng nhập tên Khoa!");
+    setIsCreating(true); let secondaryApp = null;
+    try {
+      secondaryApp = initializeApp(getApp().options, "SecondaryApp");
+      const secondaryAuth = getAuth(secondaryApp);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newAcc.email, newAcc.pass);
+      await setDoc(doc(db, "users", userCredential.user.uid), { email: newAcc.email, role: newAcc.role, dept: newAcc.role === 'KHOA' ? newAcc.dept : '', createdAt: new Date().toISOString() });
+      await signOut(secondaryAuth); alert(`✅ Đã tạo tài khoản: ${newAcc.email}`); setNewAcc({ email: '', pass: '', role: 'KHOA', dept: '' });
+    } catch (error) { alert("Lỗi: " + error.message); } finally { if (secondaryApp) deleteApp(secondaryApp); setIsCreating(false); }
   };
 
   const handleFileUpload = (e) => {
@@ -466,9 +458,10 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
       <div className="main-content">
         <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} />
         <div className="dashboard-content">
-          <div style={{marginBottom:15, display:'flex', gap:10}}>
+          <div style={{marginBottom:15, display:'flex', gap:10, flexWrap: 'wrap'}}>
              <button className={`btn ${activeTab==='employees'?'btn-primary':''}`} onClick={()=>setActiveTab('employees')} style={{background:activeTab!=='employees'?'#fff':''}}>Nhân viên</button>
-             <button className={`btn ${activeTab==='accounts'?'btn-primary':''}`} onClick={()=>setActiveTab('accounts')} style={{background:activeTab!=='accounts'?'#fff':''}}>Tài khoản</button>
+             <button className={`btn ${activeTab==='accounts'?'btn-primary':''}`} onClick={()=>setActiveTab('accounts')} style={{background:activeTab!=='accounts'?'#fff':''}}>DS Tài khoản</button>
+             <button className={`btn ${activeTab==='create_acc'?'btn-primary':''}`} onClick={()=>setActiveTab('create_acc')} style={{background:activeTab!=='create_acc'?'#fff':''}}>➕ Tạo Tài Khoản</button>
              <button className={`btn ${activeTab==='config'?'btn-primary':''}`} onClick={()=>setActiveTab('config')} style={{background:activeTab!=='config'?'#fff':''}}>Cấu hình & Backup</button>
           </div>
           
@@ -476,22 +469,24 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
             <div className="card">
               <h3>⚙️ Cấu hình hệ thống</h3>
               <div className="config-panel">
-                <div className="config-row">
-                  <label>Giờ giới hạn sáng (h):</label>
-                  <input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} />
-                  <span style={{fontSize:13, color:'#666'}}>(Sau giờ này nhân viên không được tự chấm)</span>
-                </div>
-                <div className="config-row">
-                  <label>Ngày khóa sổ (DL):</label>
-                  <input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} />
-                  <span style={{fontSize:13, color:'#666'}}>(Ngày của tháng sau sẽ khóa tháng trước)</span>
-                </div>
+                <div className="config-row"><label>Giờ giới hạn (h):</label><input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} /><span style={{fontSize:13, color:'#666'}}>(Sau giờ này nhân viên không được tự chấm)</span></div>
+                <div className="config-row"><label>Ngày khóa sổ (DL):</label><input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} /><span style={{fontSize:13, color:'#666'}}>(Ngày của tháng sau sẽ khóa tháng trước)</span></div>
                 <button className="btn btn-success" onClick={handleUpdateConfig} style={{marginTop:10}}>Lưu Cấu Hình</button>
               </div>
+              <h3>💾 Sao lưu dữ liệu</h3><p style={{fontSize:13, color:'#666'}}>Tải toàn bộ dữ liệu về máy tính.</p><button className="btn btn-primary" onClick={handleBackup}>⬇️ Tải Backup JSON</button>
+            </div>
+          )}
 
-              <h3>💾 Sao lưu dữ liệu</h3>
-              <p style={{fontSize:13, color:'#666'}}>Tải toàn bộ dữ liệu (Nhân viên, Chấm công, Tài khoản) về máy tính để dự phòng.</p>
-              <button className="btn btn-primary" onClick={handleBackup}>⬇️ Tải Backup JSON</button>
+          {activeTab === 'create_acc' && (
+            <div className="card" style={{maxWidth: 500}}>
+              <h3>➕ Cấp tài khoản mới</h3>
+              <form onSubmit={handleCreateAccount}>
+                <div className="form-group"><label>Email đăng nhập:</label><input className="login-input" type="email" placeholder="VD: noitimmach@bvien.com" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required /></div>
+                <div className="form-group"><label>Mật khẩu:</label><input className="login-input" type="text" placeholder="Nhập mật khẩu..." value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required /></div>
+                <div className="form-group"><label>Loại tài khoản:</label><select className="select-box" style={{width:'100%'}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Giám Đốc (Xem tất cả)</option><option value="ADMIN">Admin (Quản trị)</option></select></div>
+                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị):</label><input className="login-input" type="text" placeholder="VD: Khoa Nội, Phòng Kế Toán..." value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required /></div>)}
+                <button className="btn btn-success" style={{width:'100%', marginTop: 10}} disabled={isCreating}>{isCreating ? 'Đang tạo...' : 'Tạo Tài Khoản'}</button>
+              </form>
             </div>
           )}
 
@@ -510,8 +505,27 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
               </div>
             </div>
           )}
+
           {activeTab === 'accounts' && (
-            <div className="card"><h3>Tài khoản hệ thống ({accounts.length})</h3><table className="request-table" style={{marginTop:10}}><thead><tr><th>UID</th><th>Quyền</th><th>Khoa</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td style={{color:'#888'}}>{a.id}</td><td><span style={{fontWeight:'bold', color:a.role==='ADMIN'?'red':'blue'}}>{a.role}</span></td><td>{a.dept||'-'}</td></tr>))}</tbody></table></div>
+            <div className="card"><h3>Danh sách tài khoản ({accounts.length})</h3>
+              <table className="request-table" style={{marginTop:10}}>
+                <thead><tr><th>Email (ID)</th><th>Quyền</th><th>Tên Khoa</th><th>Mật khẩu</th></tr></thead>
+                <tbody>
+                  {accounts.map(a => (
+                    <tr key={a.id}>
+                      <td>{a.email} <br/><span style={{fontSize:11, color:'#888'}}>{a.id}</span></td>
+                      <td><span style={{fontWeight:'bold', color:a.role==='ADMIN'?'red':(a.role==='GIAMDOC'?'purple':'blue')}}>{a.role}</span></td>
+                      <td>{a.dept||'-'}</td>
+                      <td>
+                        <button className="btn btn-primary" style={{fontSize:12, padding:'5px 10px'}} onClick={() => handleResetPassword(a.email)}>
+                          📧 Reset
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -527,8 +541,10 @@ function App() {
   const [loginPass, setLoginPass] = useState('');
 
   useEffect(() => onAuthStateChanged(auth, async (u) => {
-    if (u) { setUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setUserData(s.data()); } 
-    else { setUser(null); setUserData(null); }
+    if (u) { 
+      const s = await getDoc(doc(db, "users", u.uid)); 
+      if (s.exists()) { setUser(u); setUserData(s.data()); } else { await signOut(auth); setUser(null); setUserData(null); }
+    } else { setUser(null); setUserData(null); }
   }), []);
 
   const handleLogout = () => { if(user?.email) localStorage.setItem('savedEmail', user.email); signOut(auth); window.location.reload(); };
