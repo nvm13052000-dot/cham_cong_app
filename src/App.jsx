@@ -48,13 +48,16 @@ const DEFAULT_SYMBOLS = [
 // --- COMPONENTS ---
 const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
   <>
-    {isOpen && <div className="sidebar-overlay" onClick={onClose}></div>}
+    {/* Overlay cho Mobile */}
+    <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}></div>
+    
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <span>🏥 App Chấm Công</span>
+        {/* Nút đóng trên mobile */}
         <span onClick={onClose} style={{cursor:'pointer', fontSize:24, display: window.innerWidth > 768 ? 'none':'block'}}>&times;</span>
       </div>
-      <div className="menu-item active">🏠 {userRole === 'ADMIN' ? 'Quản Trị' : 'Trang Chủ'}</div>
+      <div className="menu-item active" onClick={onClose}>🏠 {userRole === 'ADMIN' ? 'Quản Trị' : 'Trang Chủ'}</div>
       <div className="menu-item" onClick={()=>{onOpenChangePass(); onClose();}}>🔒 Đổi Mật Khẩu</div>
       <div style={{marginTop: 'auto', padding: '20px'}}>
         <button onClick={onLogout} className="btn btn-logout" style={{width: '100%'}}>Đăng Xuất</button>
@@ -86,7 +89,7 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
         <h2 style={{margin: 0, fontSize: '15px', color: '#334155'}}>{title}</h2>
       </div>
       <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-        <button className="btn" style={{padding:'5px 10px', fontSize:12, background:'#f1f5f9'}} onClick={onShowLegend}>📖 Chú thích</button>
+        <button className="btn" style={{padding:'5px 10px', fontSize:12, background:'#f1f5f9'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Chú thích</span></button>
         
         <div className="notification-container">
           <div className="notification-bell" onClick={handleBellClick}>
@@ -118,10 +121,9 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
 const LegendModal = ({ isOpen, onClose, symbols }) => {
   if (!isOpen) return null;
   const sortedSymbols = [...symbols].sort((a, b) => (a.order || 99) - (b.order || 99));
-  
   return (
-    <div className="modal-overlay">
-      <div className="modal-content modal-lg">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content modal-lg" onClick={e=>e.stopPropagation()}>
         <div style={{display:'flex', justifyContent:'space-between', marginBottom:15}}>
           <h3>📖 Bảng ký hiệu chấm công</h3>
           <button onClick={onClose} style={{border:'none', background:'none', fontSize:20}}>&times;</button>
@@ -129,8 +131,7 @@ const LegendModal = ({ isOpen, onClose, symbols }) => {
         <div className="legend-grid">
           {sortedSymbols.map(s => (
             <div key={s.code} className="legend-item">
-              <span className="legend-symbol">{s.code}</span>
-              <span>{s.label}</span>
+              <span className="legend-symbol">{s.code}</span><span>{s.label}</span>
             </div>
           ))}
         </div>
@@ -187,8 +188,8 @@ const AttendanceModal = ({ isOpen, onClose, onSave, dateInfo, symbols }) => {
 
   if(!isOpen) return null;
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e=>e.stopPropagation()}>
         <h3>Chấm công ngày {dateInfo.day}/{dateInfo.month}</h3>
         <div className="form-group">
           <label>Trạng thái:</label>
@@ -258,6 +259,7 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
 
 // --- SCREEN 1: KHOA ---
 const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [pendingKeys, setPendingKeys] = useState([]); 
@@ -349,9 +351,9 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
 
   return (
     <div className="app-container">
-      <Sidebar userRole="KHOA" isOpen={false} onClose={()=>{}} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
+      <Sidebar userRole="KHOA" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        <Header title={`Khoa: ${userDept}`} email={userEmail} notifications={notifications} onMenuClick={()=>{}} onShowLegend={()=>setLegendOpen(true)} />
+        <Header title={`Khoa: ${userDept}`} email={userEmail} notifications={notifications} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
           <div className="card full-height"> 
             <div className="toolbar">
@@ -376,6 +378,7 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
 
 // --- SCREEN 2: GIAMDOC ---
 const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -450,9 +453,9 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
 
   return (
     <div className="app-container">
-      <Sidebar userRole="GIAMDOC" isOpen={false} onClose={()=>{}} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
+      <Sidebar userRole="GIAMDOC" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        <Header title="Giám Đốc - Tổng Quan" email={userEmail} onMenuClick={()=>{}} onShowLegend={()=>setLegendOpen(true)} />
+        <Header title="Giám Đốc - Tổng Quan" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
           <div style={{display:'flex', gap:10, flexWrap:'wrap', marginBottom: 20}}>
             <div style={{...cardStyle, borderLeft:'4px solid #3b82f6'}}><div style={statNum}>{todayStats.total}</div><div style={statLabel}>Tổng Nhân Sự</div></div>
@@ -462,7 +465,10 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
 
           {requests.length > 0 && (
             <div className="card" style={{borderLeft:'5px solid #2563eb'}}><h3>📝 Yêu cầu chờ duyệt ({requests.length})</h3>
-              <table className="request-table"><thead><tr><th>Khoa</th><th>NV</th><th>Ngày</th><th>Đổi</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody>{requests.map(req => (<tr key={req.id}><td>{req.dept}</td><td>{req.empName}</td><td>{req.day}/{req.month}</td><td><b>{req.requestType}</b></td><td>{req.reason}</td><td><button className="btn btn-success" onClick={()=>handleApprove(req)}>✓</button><button className="btn btn-danger" onClick={()=>handleReject(req)}>✗</button></td></tr>))}</tbody></table>
+              <table className="request-table">
+                <thead><tr><th>Khoa</th><th>NV</th><th>Ngày</th><th>Đổi</th><th>Lý do</th><th>Thao tác</th></tr></thead>
+                <tbody>{requests.map(req => (<tr key={req.id}><td data-label="Khoa">{req.dept}</td><td data-label="NV">{req.empName}</td><td data-label="Ngày">{req.day}/{req.month}</td><td data-label="Đổi" style={{fontWeight:'bold', color:req.requestType==='KP'?'red':'green'}}>{req.requestType}</td><td data-label="Lý do">{req.reason}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:5, justifyContent:'flex-end'}}><button className="btn btn-success" onClick={()=>handleApprove(req)}>Duyệt</button><button className="btn btn-danger" onClick={()=>handleReject(req)}>Từ chối</button></div></td></tr>))}</tbody>
+              </table>
             </div>
           )}
 
@@ -487,7 +493,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   );
 };
 
-// --- SCREEN 3: ADMIN (FIX FULL HEIGHT) ---
+// --- SCREEN 3: ADMIN ---
 const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('employees');
@@ -537,9 +543,9 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
 
   return (
     <div className="app-container">
-      <Sidebar userRole="ADMIN" isOpen={false} onClose={()=>{}} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
+      <Sidebar userRole="ADMIN" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>{}} />
+        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>{}} />
         <div className="dashboard-content">
           <div style={{marginBottom:15, display:'flex', gap:10, flexWrap: 'wrap'}}>
              <button className={`btn ${activeTab==='employees'?'btn-primary':''}`} onClick={()=>setActiveTab('employees')}>Nhân viên</button>
@@ -560,28 +566,28 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           )}
 
           {activeTab === 'symbols' && (
-            <div className="card full-height"> {/* Full height cho bảng symbols */}
+            <div className="card full-height">
               <div style={{display:'flex', justifyContent:'space-between', marginBottom:10}}>
                 <h3>⚙️ Quản lý ký hiệu</h3>
                 <div><button className="btn" onClick={handleResetSymbols} style={{marginRight:10}}>Khôi phục</button><button className="btn btn-success" onClick={handleUpdateSymbols}>Lưu thay đổi</button></div>
               </div>
-              <div className="table-fill"> {/* Dùng class mới */}
+              <div className="matrix-wrapper">
                 <table className="request-table">
                   <thead><tr><th>STT</th><th>Ký hiệu</th><th>Mô tả</th><th>Giá trị</th><th>Nhóm tính tổng</th></tr></thead>
                   <tbody>
                     {symbols.map((s, idx) => (
                       <tr key={s.code}>
-                        <td style={{display:'flex', alignItems:'center', gap:10, justifyContent:'center'}}>
+                        <td style={{display:'flex', alignItems:'center', gap:10, justifyContent:'center'}} data-label="Thứ tự">
                             <span style={{fontWeight:'bold', width:20}}>{idx+1}</span>
                             <div style={{display:'flex', flexDirection:'column'}}>
                                 <button type="button" style={{fontSize:10, cursor:'pointer', border:'none', background:'none', padding:0, color:'#2563eb'}} onClick={()=>moveItem(idx, -1)}>▲</button>
                                 <button type="button" style={{fontSize:10, cursor:'pointer', border:'none', background:'none', padding:0, color:'#2563eb'}} onClick={()=>moveItem(idx, 1)}>▼</button>
                             </div>
                         </td>
-                        <td><input value={s.code} onChange={e=>changeSymbol(idx, 'code', e.target.value)} className="input-mini" style={{width:50, fontWeight:'bold'}} /></td>
-                        <td><input value={s.label} onChange={e=>changeSymbol(idx, 'label', e.target.value)} style={{width:'100%', padding:5, border:'1px solid #ddd'}} /></td>
-                        <td><input type="number" step="0.5" value={s.val} onChange={e=>changeSymbol(idx, 'val', e.target.value)} className="input-mini" /></td>
-                        <td><select value={s.type} onChange={e=>changeSymbol(idx, 'type', e.target.value)} className="select-mini"><option value="SALARY">Hưởng lương (Cột 32)</option><option value="UNPAID">Không lương (Cột 33)</option><option value="INSURANCE">BHXH (Cột 34)</option></select></td>
+                        <td data-label="Ký hiệu"><input value={s.code} onChange={e=>changeSymbol(idx, 'code', e.target.value)} className="input-mini" style={{width:50, fontWeight:'bold'}} /></td>
+                        <td data-label="Mô tả"><input value={s.label} onChange={e=>changeSymbol(idx, 'label', e.target.value)} style={{width:'100%', padding:5, border:'1px solid #ddd'}} /></td>
+                        <td data-label="Giá trị"><input type="number" step="0.5" value={s.val} onChange={e=>changeSymbol(idx, 'val', e.target.value)} className="input-mini" /></td>
+                        <td data-label="Nhóm"><select value={s.type} onChange={e=>changeSymbol(idx, 'type', e.target.value)} className="select-mini"><option value="SALARY">Hưởng lương (Cột 32)</option><option value="UNPAID">Không lương (Cột 33)</option><option value="INSURANCE">BHXH (Cột 34)</option></select></td>
                       </tr>
                     ))}
                   </tbody>
@@ -595,25 +601,24 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           )}
 
           {activeTab === 'accounts' && (
-            <div className="card full-height"> {/* Full height cho bảng account */}
-              <h3>Danh sách tài khoản ({accounts.length})</h3>
-              <div className="table-fill">
-                <table className="request-table"><thead><tr><th>Email</th><th>Quyền</th><th>Khoa</th><th>Thao tác</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td>{a.email}</td><td><b>{a.role}</b></td><td>{a.dept||'-'}</td><td><button className="btn btn-primary" style={{fontSize:11, marginRight:5}} onClick={()=>handleResetPassword(a.email)}>Mail Reset</button><button className="btn btn-logout" style={{fontSize:11}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></td></tr>))}</tbody></table>
+            <div className="card full-height"><h3>Danh sách tài khoản ({accounts.length})</h3>
+              <div className="matrix-wrapper">
+                <table className="request-table"><thead><tr><th>Email</th><th>Quyền</th><th>Khoa</th><th>Thao tác</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email">{a.email}</td><td data-label="Quyền"><b>{a.role}</b></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác"><button className="btn btn-primary" style={{fontSize:11, marginRight:5}} onClick={()=>handleResetPassword(a.email)}>Mail Reset</button><button className="btn btn-logout" style={{fontSize:11}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></td></tr>))}</tbody></table>
               </div>
             </div>
           )}
           
           {activeTab === 'employees' && (
-            <div className="card full-height"> {/* Full height cho bảng nhân viên */}
+            <div className="card full-height">
               <div className="toolbar">
                  <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm tên, mã, hoặc khoa..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
                  <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
                  <label className="btn btn-primary" style={{cursor:'pointer', marginLeft:'auto'}}>📂 Import Excel<input type="file" hidden onChange={handleFileUpload} /></label>
               </div>
-              <div className="table-fill"> {/* Thay thế maxHeight bằng class mới */}
+              <div className="matrix-wrapper">
                 <table className="request-table">
                   <thead><tr><th>Mã</th><th>Tên</th><th>Khoa</th><th>Chức Vụ</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
-                  <tbody>{finalEmployees.map(e => (<tr key={e.id}><td>{e.id}</td><td>{e.name}</td><td>{e.dept}</td><td>{e.position}</td><td style={{textAlign:'right'}}><button className="btn btn-logout" onClick={()=>handleDeleteEmployee(e.id)}>Xóa</button></td></tr>))}</tbody>
+                  <tbody>{finalEmployees.map(e => (<tr key={e.id}><td data-label="Mã">{e.id}</td><td data-label="Tên">{e.name}</td><td data-label="Khoa">{e.dept}</td><td data-label="Chức vụ">{e.position}</td><td data-label="Thao tác" style={{textAlign:'right'}}><button className="btn btn-logout" onClick={()=>handleDeleteEmployee(e.id)}>Xóa</button></td></tr>))}</tbody>
                 </table>
               </div>
             </div>
