@@ -48,7 +48,7 @@ const DEFAULT_SYMBOLS = [
 ];
 
 // --- COMPONENTS ---
-const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
+const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose, activeTab, setActiveTab }) => (
   <>
     <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}></div>
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -56,12 +56,27 @@ const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
         <span>🏥 App Chấm Công</span>
         <span onClick={onClose} style={{cursor:'pointer', fontSize:24, display: window.innerWidth > 768 ? 'none':'block'}}>&times;</span>
       </div>
-      <div style={{padding: '10px 0'}}>
-        <div className="menu-item active" onClick={onClose}>🏠 {userRole === 'ADMIN' ? 'Quản Trị' : 'Trang Chủ'}</div>
+      
+      <div className="sidebar-content">
+        {userRole === 'ADMIN' ? (
+          <>
+            <div className="menu-label">QUẢN TRỊ</div>
+            <div className={`menu-item ${activeTab==='employees'?'active':''}`} onClick={()=>{setActiveTab('employees'); onClose();}}>👥 Nhân viên</div>
+            <div className={`menu-item ${activeTab==='accounts'?'active':''}`} onClick={()=>{setActiveTab('accounts'); onClose();}}>🔑 Tài khoản</div>
+            <div className={`menu-item ${activeTab==='create_acc'?'active':''}`} onClick={()=>{setActiveTab('create_acc'); onClose();}}>➕ Cấp tài khoản</div>
+            <div className={`menu-item ${activeTab==='symbols'?'active':''}`} onClick={()=>{setActiveTab('symbols'); onClose();}}>🔣 Ký hiệu công</div>
+            <div className={`menu-item ${activeTab==='config'?'active':''}`} onClick={()=>{setActiveTab('config'); onClose();}}>⚙️ Cấu hình</div>
+          </>
+        ) : (
+          <div className="menu-item active" onClick={onClose}>🏠 Bảng Chấm Công</div>
+        )}
+        
+        <div className="menu-label" style={{marginTop:15}}>TÀI KHOẢN</div>
         <div className="menu-item" onClick={()=>{onOpenChangePass(); onClose();}}>🔒 Đổi Mật Khẩu</div>
       </div>
-      <div style={{marginTop: 'auto', padding: '20px'}}>
-        <button onClick={onLogout} className="btn btn-logout" style={{width: '100%'}}>Đăng Xuất</button>
+
+      <div className="sidebar-footer">
+        <button onClick={onLogout} className="btn btn-logout">Đăng Xuất</button>
       </div>
     </div>
   </>
@@ -88,13 +103,13 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
       </div>
       <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
         <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>
-        <div className="notification-bell-container" onClick={handleBellClick}>
-            <span className="notification-bell">🔔</span>
+        <div style={{position:'relative', cursor:'pointer'}} onClick={handleBellClick}>
+            <span style={{fontSize:22, color:'#64748b'}}>🔔</span>
             {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
         </div>
           {showDropdown && (
             <div className="notification-dropdown">
-              <div className="notif-header">Thông báo ({unreadCount} mới)</div>
+              <div style={{fontWeight:'bold', padding:15, borderBottom:'1px solid #f1f5f9', background:'#f8fafc'}}>Thông báo ({unreadCount} mới)</div>
               {(!notifications || notifications.length === 0) && <div style={{padding:20, color:'#94a3b8', textAlign:'center'}}>Không có thông báo nào</div>}
               {notifications && notifications.map((n, i) => (
                 <div key={i} className={`notif-item ${n.isRead ? 'read' : 'unread'}`}>
@@ -120,8 +135,15 @@ const LegendModal = ({ isOpen, onClose, symbols }) => {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-lg" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header"><h3>📖 Bảng Ký Hiệu</h3><button onClick={onClose} className="close-btn">&times;</button></div>
-        <div className="legend-grid">{sortedSymbols.map(s => (<div key={s.code} className="legend-item"><span className="legend-symbol">{s.code}</span><span className="legend-desc">{s.label}</span></div>))}</div>
+        <div className="modal-header">
+          <h3>📖 Bảng Ký Hiệu Chấm Công</h3>
+          <button onClick={onClose} className="close-btn">&times;</button>
+        </div>
+        <div className="legend-grid">
+          {sortedSymbols.map(s => (
+            <div key={s.code} className="legend-item"><span className="legend-symbol">{s.code}</span><span className="legend-desc">{s.label}</span></div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -138,7 +160,7 @@ const RequestModal = ({ isOpen, onClose, onSubmit, dateInfo, symbols }) => {
       <div className="modal-content">
         <div className="modal-header"><h3>📝 Gửi Yêu Cầu ({dateInfo.day}/{dateInfo.month})</h3><button onClick={onClose} className="close-btn">&times;</button></div>
         <div className="form-group"><label>Sửa thành:</label><select className="select-box" style={{width:'100%'}} value={type} onChange={e=>setType(e.target.value)}>{sortedSymbols.map(s => <option key={s.code} value={s.code}>{s.code} - {s.label}</option>)}</select></div>
-        <div className="form-group"><label>Lý do (bắt buộc):</label><input className="login-input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do..." /></div>
+        <div className="form-group"><label>Lý do (bắt buộc):</label><input className="login-input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do cụ thể..." /></div>
         <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:25}}><button className="btn" onClick={onClose}>Hủy bỏ</button><button className="btn btn-primary" onClick={() => onSubmit(type, reason)} disabled={!reason}>Gửi yêu cầu</button></div>
       </div>
     </div>
@@ -194,8 +216,8 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
     <div className="matrix-wrapper">
       <table className="matrix-table">
         <thead>
-          <tr><th style={{height: 35}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', color:'#1e293b', letterSpacing:'1px'}}>TỔNG</th></tr>
-          <tr><th style={{top: 35}}>NHÂN VIÊN</th>{days.map(d => <th key={d} style={{top: 35}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}<th className="col-total col-salary" style={{top:35}}>LTG</th><th className="col-total col-unpaid" style={{top:35}}>KoL</th><th className="col-total col-insurance" style={{top:35}}>BH</th></tr>
+          <tr><th style={{height: 38}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', color:'#1e293b', letterSpacing:'1px'}}>TỔNG HỢP</th></tr>
+          <tr><th style={{top: 38}}>NHÂN VIÊN</th>{days.map(d => <th key={d} style={{top: 38}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}<th className="col-total col-salary" style={{top:38}}>Lương</th><th className="col-total col-unpaid" style={{top:38}}>KoL</th><th className="col-total col-insurance" style={{top:38}}>BHXH</th></tr>
         </thead>
         <tbody>
           {employees.map(emp => {
@@ -337,8 +359,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sortBy, setSortBy] = useState('name');
   const [symbols, setSymbols] = useState(DEFAULT_SYMBOLS);
   const [legendOpen, setLegendOpen] = useState(false);
-  const [todayStats, setTodayStats] = useState({ total: 0, present: 0, unpaid: 0 });
-
+  
   useEffect(() => {
     const unsubSym = onSnapshot(doc(db, "settings", "symbols"), (doc) => { if (doc.exists() && doc.data().list) setSymbols(doc.data().list); });
     getDocs(collection(db, "employees")).then(snap => {
@@ -351,17 +372,6 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     const unsubReq = onSnapshot(query(collection(db, "requests"), where("status", "==", "PENDING")), (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => { unsubAtt(); unsubReq(); unsubSym(); };
   }, []);
-
-  useEffect(() => {
-    if (allEmployees.length === 0) return;
-    const today = new Date(); const d = today.getDate(); const m = today.getMonth()+1; const y = today.getFullYear();
-    let present = 0, unpaid = 0;
-    allEmployees.forEach(emp => {
-      const key = `${emp.id}_${d}_${m}_${y}`; const code = attendance[key];
-      if (code) { const sym = symbols.find(s => s.code === code); if (sym && sym.type === 'SALARY') present++; else unpaid++; } else unpaid++;
-    });
-    setTodayStats({ total: allEmployees.length, present, unpaid });
-  }, [attendance, allEmployees, symbols]);
 
   const handleApprove = async (req) => {
     if(!confirm(`Duyệt yêu cầu của ${req.empName}?`)) return;
@@ -388,22 +398,12 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `BaoCao_TongHop_T${selMonth}_${selYear}.xlsx`);
   };
 
-  const cardStyle = { background: '#fff', padding: '20px', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)', flex: 1, minWidth: 160, textAlign:'left', border:'1px solid #e2e8f0' };
-  const statValue = { fontSize: 28, fontWeight: 800, lineHeight: 1, marginBottom: 8 };
-  const statLabel = { fontSize: 14, color: '#64748b', fontWeight: 600 };
-  
   return (
     <div className="app-container">
       <Sidebar userRole="GIAMDOC" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
         <Header title="Tổng Quan Giám Đốc" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
-          <div style={{display:'flex', gap:20, flexWrap:'wrap', marginBottom: 25}}>
-            <div style={{...cardStyle}}><div style={{...statValue, color:'#2563eb'}}>{todayStats.total}</div><div style={statLabel}>Tổng nhân sự</div></div>
-            <div style={{...cardStyle}}><div style={{...statValue, color:'#10b981'}}>{todayStats.present}</div><div style={statLabel}>Đi làm hôm nay</div></div>
-            <div style={{...cardStyle}}><div style={{...statValue, color:'#ef4444'}}>{todayStats.unpaid}</div><div style={statLabel}>Vắng / Ko lương</div></div>
-          </div>
-
           {requests.length > 0 && (
             <div className="card" style={{borderLeft:'4px solid #2563eb'}}><h3>📝 Yêu cầu chờ duyệt ({requests.length})</h3>
               <table className="request-table">
@@ -437,9 +437,10 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   );
 };
 
-// --- SCREEN 3: ADMIN (GIAO DIỆN ĐẸP HƠN) ---
+// --- SCREEN 3: ADMIN (MENU BÊN TRÁI) ---
 const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // --- CHUYỂN TAB VÀO STATE, ĐƯỢC ĐIỀU KHIỂN BỞI SIDEBAR ---
   const [activeTab, setActiveTab] = useState('employees');
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]); 
@@ -480,87 +481,97 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const changeSymbol = (idx, field, val) => { const newSyms = [...symbols]; newSyms[idx][field] = val; setSymbols(newSyms); };
   const finalEmployees = sortEmployees(employees.filter(e => e.name && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase()) || e.dept.toLowerCase().includes(searchTerm.toLowerCase()))), sortBy);
 
-  const tabStyle = (tabName) => ({ background: activeTab===tabName ? '#2563eb' : 'white', color: activeTab===tabName ? 'white' : '#64748b', border: activeTab===tabName ? 'none' : '1px solid #e2e8f0' });
-
-  return (
-    <div className="app-container">
-      <Sidebar userRole="ADMIN" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
-      <div className="main-content">
-        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>{}} />
-        <div className="dashboard-content">
-          <div style={{marginBottom:25, display:'flex', gap:10, flexWrap: 'wrap', paddingBottom:20, borderBottom:'1px solid #e2e8f0'}}>
-             <button className="btn" style={tabStyle('employees')} onClick={()=>setActiveTab('employees')}>👥 Nhân viên</button>
-             <button className="btn" style={tabStyle('accounts')} onClick={()=>setActiveTab('accounts')}>🔑 Tài khoản</button>
-             <button className="btn" style={tabStyle('create_acc')} onClick={()=>setActiveTab('create_acc')}>➕ Cấp tài khoản</button>
-             <button className="btn" style={tabStyle('symbols')} onClick={()=>setActiveTab('symbols')}>🔣 Ký hiệu công</button>
-             <button className="btn" style={tabStyle('config')} onClick={()=>setActiveTab('config')}>⚙️ Cấu hình</button>
+  // --- RENDER CONTENT BASED ON TAB ---
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'employees':
+        return (
+          <div className="card full-height">
+            <h3>Danh sách nhân sự ({finalEmployees.length})</h3>
+            <div className="toolbar">
+               <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm theo tên, mã..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
+               <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Sắp xếp: Tên A-Z</option><option value="position">Sắp xếp: Chức vụ</option></select>
+               <label className="btn btn-primary" style={{cursor:'pointer'}}>📂 Nhập Excel<input type="file" hidden onChange={handleFileUpload} accept=".xlsx, .xls" /></label>
+            </div>
+            <div className="matrix-wrapper">
+              <table className="request-table">
+                <thead><tr><th>Mã NV</th><th>Họ và Tên</th><th>Khoa / Phòng</th><th>Chức Vụ</th><th style={{textAlign:'right'}}>Hành động</th></tr></thead>
+                <tbody>{finalEmployees.map(e => (<tr key={e.id}><td data-label="Mã" style={{fontWeight:700}}>{e.id}</td><td data-label="Tên" style={{fontWeight:600, color:'#1e293b'}}>{e.name}</td><td data-label="Khoa">{e.dept}</td><td data-label="Chức vụ">{e.position}</td><td data-label="Hành động" style={{textAlign:'right'}}><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteEmployee(e.id)}>🗑️ Xóa</button></td></tr>))}</tbody>
+              </table>
+            </div>
           </div>
-          
-          {activeTab === 'config' && (
-            <div className="admin-form-container">
+        );
+      case 'accounts':
+        return (
+          <div className="card full-height"><h3>Danh sách tài khoản ({accounts.length})</h3>
+            <div className="matrix-wrapper">
+              <table className="request-table"><thead><tr><th>Email</th><th>Quyền hạn</th><th>Khoa</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
+                <tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email" style={{fontWeight:600}}>{a.email}</td><td data-label="Quyền"><span style={{fontWeight:700, padding:'4px 10px', borderRadius:6, background: a.role==='ADMIN'?'#fee2e2':(a.role==='GIAMDOC'?'#dbeafe':'#f1f5f9'), color: a.role==='ADMIN'?'#dc2626':(a.role==='GIAMDOC'?'#2563eb':'#64748b')}}>{a.role}</span></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-primary" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleResetPassword(a.email)}>Mail</button><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></div></td></tr>))}</tbody>
+              </table>
+            </div>
+          </div>
+        );
+      case 'create_acc':
+        return (
+          <div className="admin-form-container">
+            <div className="card">
+              <h3 style={{textAlign:'center', marginBottom:20, color:'#2563eb'}}>➕ Cấp tài khoản mới</h3>
+              <form onSubmit={handleCreateAccount}>
+                <div className="form-row">
+                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required /></div>
+                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required /></div>
+                </div>
+                <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Giám Đốc</option><option value="ADMIN">Admin</option></select></div>
+                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required /></div>)}
+                <button className="btn btn-success" style={{width:'100%', marginTop: 20, padding: 14}} disabled={isCreating}>{isCreating ? 'Đang tạo...' : 'Tạo Tài Khoản'}</button>
+              </form>
+            </div>
+          </div>
+        );
+      case 'symbols':
+        return (
+          <div className="card full-height">
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}><h3>🔣 Quản lý ký hiệu</h3><div style={{display:'flex', gap:10}}><button className="btn" onClick={handleResetSymbols}>Khôi phục</button><button className="btn btn-success" onClick={handleUpdateSymbols}>Lưu</button></div></div>
+            <div className="matrix-wrapper">
+              <table className="request-table">
+                <thead><tr><th style={{width:80}}>Thứ tự</th><th style={{width:100}}>Mã</th><th>Mô tả</th><th style={{width:100}}>Giá trị</th><th style={{width:150}}>Nhóm</th></tr></thead>
+                <tbody>{symbols.map((s, idx) => (<tr key={s.code}><td data-label="TT" style={{display:'flex', gap:10, alignItems:'center'}}><span style={{fontWeight:700, width:20}}>{idx+1}</span><div style={{display:'flex', flexDirection:'column'}}><button style={{border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:0, fontSize:18}} onClick={()=>moveItem(idx,-1)}>▴</button><button style={{border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:0, fontSize:18}} onClick={()=>moveItem(idx,1)}>▾</button></div></td><td data-label="Mã"><input value={s.code} onChange={e=>changeSymbol(idx,'code',e.target.value)} className="config-input" style={{width:'100%'}}/></td><td data-label="Mô tả"><input value={s.label} onChange={e=>changeSymbol(idx,'label',e.target.value)} className="login-input"/></td><td data-label="Giá trị"><input type="number" step="0.5" value={s.val} onChange={e=>changeSymbol(idx,'val',e.target.value)} className="config-input" style={{width:'100%'}}/></td><td data-label="Nhóm"><select value={s.type} onChange={e=>changeSymbol(idx,'type',e.target.value)} className="select-box" style={{width:'100%'}}><option value="SALARY">Lương</option><option value="UNPAID">Ko Lương</option><option value="INSURANCE">BHXH</option></select></td></tr>))}</tbody>
+              </table>
+            </div>
+          </div>
+        );
+      case 'config':
+        return (
+          <div className="admin-form-container">
+            <div className="card">
               <h3>⚙️ Cấu hình hệ thống</h3>
               <div className="config-container">
                 <div className="config-item"><label>Giờ khóa sổ (Sáng)</label><input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} /></div>
                 <div className="config-item"><label>Ngày khóa sổ tháng</label><input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} /></div>
-                <button className="btn btn-success" onClick={handleUpdateConfig} style={{height:45, marginTop: 'auto', padding:'0 25px'}}>💾 Lưu cấu hình</button>
+                <button className="btn btn-success" onClick={handleUpdateConfig} style={{height:45, marginTop:'auto', padding:'0 25px'}}>Lưu cấu hình</button>
               </div>
-              <p style={{marginTop:20, fontSize:14, color:'#64748b', textAlign:'center'}}>* Ví dụ: Ngày khóa sổ là 2, thì đến hết ngày 2 tháng sau sẽ không thể chấm công cho tháng trước đó.</p>
             </div>
-          )}
+          </div>
+        );
+      default: return null;
+    }
+  };
 
-          {activeTab === 'symbols' && (
-            <div className="card">
-              <div style={{display:'flex', justifyContent:'space-between', marginBottom:20, alignItems:'center'}}><h3>🔣 Quản lý ký hiệu chấm công</h3><div style={{display:'flex', gap:15}}><button className="btn" onClick={handleResetSymbols}>Khôi phục gốc</button><button className="btn btn-success" onClick={handleUpdateSymbols}>💾 Lưu thay đổi</button></div></div>
-              <div className="matrix-wrapper" style={{height: 'calc(100vh - 350px)'}}>
-                <table className="request-table">
-                  <thead><tr><th style={{width:80}}>Thứ tự</th><th style={{width:100}}>Mã hiển thị</th><th>Mô tả đầy đủ</th><th style={{width:120}}>Giá trị công</th><th style={{width:180}}>Nhóm tính tổng</th></tr></thead>
-                  <tbody>{symbols.map((s, idx) => (<tr key={s.code}><td data-label="TT" style={{display:'flex', gap:10, alignItems:'center'}}><span style={{fontWeight:700, width:20}}>{idx+1}</span><div style={{display:'flex', flexDirection:'column'}}><button style={{border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, lineHeight:1, fontSize:18}} onClick={()=>moveItem(idx,-1)}>▴</button><button style={{border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, lineHeight:1, fontSize:18}} onClick={()=>moveItem(idx,1)}>▾</button></div></td><td data-label="Mã"><input value={s.code} onChange={e=>changeSymbol(idx,'code',e.target.value)} className="config-input" style={{width:'100%'}}/></td><td data-label="Mô tả"><input value={s.label} onChange={e=>changeSymbol(idx,'label',e.target.value)} className="login-input"/></td><td data-label="Giá trị"><input type="number" step="0.5" value={s.val} onChange={e=>changeSymbol(idx,'val',e.target.value)} className="config-input" style={{width:'100%'}}/></td><td data-label="Nhóm"><select value={s.type} onChange={e=>changeSymbol(idx,'type',e.target.value)} className="select-box" style={{width:'100%'}}><option value="SALARY">Lương thời gian</option><option value="UNPAID">Nghỉ không lương</option><option value="INSURANCE">Chế độ BHXH</option></select></td></tr>))}</tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'create_acc' && (
-            <div className="admin-form-container">
-                <h3>➕ Cấp tài khoản mới</h3>
-                <form onSubmit={handleCreateAccount}>
-                  <div className="form-row">
-                    <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required placeholder="VD: khoanoi@benhvien.com" /></div>
-                    <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required placeholder="Tối thiểu 6 ký tự" /></div>
-                  </div>
-                  <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Ban Giám Đốc</option><option value="ADMIN">Quản trị viên hệ thống</option></select></div>
-                  {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required placeholder="VD: Khoa Nội Tổng Hợp" /></div>)}
-                  <button className="btn btn-success" style={{width:'100%', marginTop: 25, padding: 14, fontSize: 16}} disabled={isCreating}>{isCreating ? '⏳ Đang xử lý...' : '✨ Tạo Tài Khoản Ngay'}</button>
-                </form>
-            </div>
-          )}
-
-          {activeTab === 'accounts' && (
-            <div className="card"><h3>Danh sách tài khoản hệ thống ({accounts.length})</h3>
-              <div className="matrix-wrapper" style={{height: 'calc(100vh - 300px)'}}>
-                <table className="request-table"><thead><tr><th>Email đăng nhập</th><th>Quyền hạn</th><th>Khoa phụ trách</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
-                  <tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email" style={{fontWeight:600}}>{a.email}</td><td data-label="Quyền"><span style={{fontWeight:700, padding:'4px 10px', borderRadius:6, background: a.role==='ADMIN'?'#fee2e2':(a.role==='GIAMDOC'?'#dbeafe':'#f1f5f9'), color: a.role==='ADMIN'?'#dc2626':(a.role==='GIAMDOC'?'#2563eb':'#64748b')}}>{a.role}</span></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-primary" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleResetPassword(a.email)}>📧 Gửi mail reset</button><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteAccount(a.id, a.email)}>🗑️ Xóa</button></div></td></tr>))}</tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          
-          {activeTab === 'employees' && (
-            <div className="card">
-              <h3>Danh sách nhân sự toàn viện ({finalEmployees.length})</h3>
-              <div className="toolbar" style={{marginTop:20, marginBottom:20}}>
-                 <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm theo tên, mã, hoặc khoa..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
-                 <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Sắp xếp: Tên A-Z</option><option value="position">Sắp xếp: Chức vụ</option></select>
-                 <label className="btn btn-primary" style={{cursor:'pointer', marginLeft:'auto'}}>📂 Nhập từ Excel<input type="file" hidden onChange={handleFileUpload} accept=".xlsx, .xls" /></label>
-              </div>
-              <div className="matrix-wrapper" style={{height: 'calc(100vh - 380px)'}}>
-                <table className="request-table">
-                  <thead><tr><th>Mã NV</th><th>Họ và Tên</th><th>Khoa / Phòng</th><th>Chức Vụ</th><th style={{textAlign:'right'}}>Hành động</th></tr></thead>
-                  <tbody>{finalEmployees.map(e => (<tr key={e.id}><td data-label="Mã" style={{fontWeight:700}}>{e.id}</td><td data-label="Tên" style={{fontWeight:600, color:'#1e293b'}}>{e.name}</td><td data-label="Khoa">{e.dept}</td><td data-label="Chức vụ">{e.position}</td><td data-label="Hành động" style={{textAlign:'right'}}><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteEmployee(e.id)}>🗑️ Xóa nhân viên</button></td></tr>))}</tbody>
-                </table>
-              </div>
-            </div>
-          )}
+  return (
+    <div className="app-container">
+      <Sidebar 
+        userRole="ADMIN" 
+        isOpen={sidebarOpen} 
+        onClose={()=>setSidebarOpen(false)} 
+        onLogout={onLogout} 
+        onOpenChangePass={onOpenChangePass} 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
+      <div className="main-content">
+        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>{}} />
+        <div className="dashboard-content">
+          {renderContent()}
         </div>
       </div>
     </div>
@@ -595,7 +606,8 @@ function App() {
         <form onSubmit={handleLogin} className="login-card">
           <div className="login-icon">🏥</div>
           <div className="login-title">Hệ Thống Chấm Công</div>
-          <div className="form-group" style={{textAlign:'left'}}>
+          <div className="login-subtitle">Vui lòng đăng nhập để tiếp tục</div>
+          <div className="form-group" style={{textAlign:'left', marginTop:30}}>
             <label>Email đăng nhập</label>
             <input className="login-input" type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required placeholder="name@example.com" style={{padding:'14px'}}/>
           </div>
@@ -603,7 +615,7 @@ function App() {
             <label>Mật khẩu</label>
             <input className="login-input" type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required placeholder="••••••••" style={{padding:'14px'}}/>
           </div>
-          <button className="btn btn-primary login-btn">ĐĂNG NHẬP</button>
+          <button className="btn btn-primary" style={{width:'100%', padding:14, fontSize:16, marginTop:10}}>ĐĂNG NHẬP</button>
         </form>
       </div>
     );
