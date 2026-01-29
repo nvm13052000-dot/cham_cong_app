@@ -56,12 +56,12 @@ const Sidebar = ({ userRole, onLogout, onOpenChangePass, isOpen, onClose }) => (
         <span>🏥 App Chấm Công</span>
         <span onClick={onClose} style={{cursor:'pointer', fontSize:24, display: window.innerWidth > 768 ? 'none':'block'}}>&times;</span>
       </div>
-      <div style={{padding: '20px 10px'}}>
-          <div className="menu-item active" onClick={onClose}>🏠 {userRole === 'ADMIN' ? 'Quản Trị Hệ Thống' : 'Bảng Chấm Công'}</div>
-          <div className="menu-item" onClick={()=>{onOpenChangePass(); onClose();}}>🔒 Đổi Mật Khẩu</div>
+      <div style={{padding: '10px 0'}}>
+        <div className="menu-item active" onClick={onClose}>🏠 {userRole === 'ADMIN' ? 'Quản Trị' : 'Trang Chủ'}</div>
+        <div className="menu-item" onClick={()=>{onOpenChangePass(); onClose();}}>🔒 Đổi Mật Khẩu</div>
       </div>
       <div style={{marginTop: 'auto', padding: '20px'}}>
-        <button onClick={onLogout} className="btn btn-logout" style={{width: '100%', justifyContent: 'center'}}>Đăng Xuất</button>
+        <button onClick={onLogout} className="btn btn-logout" style={{width: '100%'}}>Đăng Xuất</button>
       </div>
     </div>
   </>
@@ -84,10 +84,10 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
     <div className="top-header">
       <div style={{display:'flex', alignItems:'center', gap:15}}>
         <button className="menu-btn" onClick={onMenuClick}>☰</button>
-        <h2 style={{margin: 0, fontSize: '20px', color: '#1e293b', fontWeight: '700'}}>{title}</h2>
+        <h2 style={{margin: 0, fontSize: '18px', color: '#1e293b', fontWeight: '700'}}>{title}</h2>
       </div>
-      <div style={{display: 'flex', alignItems: 'center', gap: 20}}>
-        <button className="btn" style={{background:'#fff', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>
+      <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
+        <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>
         <div className="notification-bell-container" onClick={handleBellClick}>
             <span className="notification-bell">🔔</span>
             {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
@@ -120,15 +120,8 @@ const LegendModal = ({ isOpen, onClose, symbols }) => {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-lg" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>📖 Bảng Ký Hiệu Chấm Công</h3>
-          <button onClick={onClose} className="close-btn">&times;</button>
-        </div>
-        <div className="legend-grid">
-          {sortedSymbols.map(s => (
-            <div key={s.code} className="legend-item"><span className="legend-symbol">{s.code}</span><span className="legend-desc">{s.label}</span></div>
-          ))}
-        </div>
+        <div className="modal-header"><h3>📖 Bảng Ký Hiệu</h3><button onClick={onClose} className="close-btn">&times;</button></div>
+        <div className="legend-grid">{sortedSymbols.map(s => (<div key={s.code} className="legend-item"><span className="legend-symbol">{s.code}</span><span className="legend-desc">{s.label}</span></div>))}</div>
       </div>
     </div>
   );
@@ -145,7 +138,7 @@ const RequestModal = ({ isOpen, onClose, onSubmit, dateInfo, symbols }) => {
       <div className="modal-content">
         <div className="modal-header"><h3>📝 Gửi Yêu Cầu ({dateInfo.day}/{dateInfo.month})</h3><button onClick={onClose} className="close-btn">&times;</button></div>
         <div className="form-group"><label>Sửa thành:</label><select className="select-box" style={{width:'100%'}} value={type} onChange={e=>setType(e.target.value)}>{sortedSymbols.map(s => <option key={s.code} value={s.code}>{s.code} - {s.label}</option>)}</select></div>
-        <div className="form-group"><label>Lý do (bắt buộc):</label><input className="login-input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do cụ thể..." /></div>
+        <div className="form-group"><label>Lý do (bắt buộc):</label><input className="login-input" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do..." /></div>
         <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:25}}><button className="btn" onClick={onClose}>Hủy bỏ</button><button className="btn btn-primary" onClick={() => onSubmit(type, reason)} disabled={!reason}>Gửi yêu cầu</button></div>
       </div>
     </div>
@@ -201,8 +194,8 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
     <div className="matrix-wrapper">
       <table className="matrix-table">
         <thead>
-          <tr><th style={{height: 35}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', color:'#1e293b', letterSpacing:'1px'}}>TỔNG HỢP</th></tr>
-          <tr><th style={{top: 35}}>NHÂN VIÊN</th>{days.map(d => <th key={d} style={{top: 35}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}<th className="col-total col-salary" style={{top:35}}>Lương</th><th className="col-total col-unpaid" style={{top:35}}>Ko Lương</th><th className="col-total col-insurance" style={{top:35}}>BHXH</th></tr>
+          <tr><th style={{height: 35}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', color:'#1e293b', letterSpacing:'1px'}}>TỔNG</th></tr>
+          <tr><th style={{top: 35}}>NHÂN VIÊN</th>{days.map(d => <th key={d} style={{top: 35}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}<th className="col-total col-salary" style={{top:35}}>LTG</th><th className="col-total col-unpaid" style={{top:35}}>KoL</th><th className="col-total col-insurance" style={{top:35}}>BH</th></tr>
         </thead>
         <tbody>
           {employees.map(emp => {
@@ -269,9 +262,9 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   const finalEmployees = sortEmployees(employees.filter(e => e.name && e.name.toLowerCase().includes(searchTerm.toLowerCase())), sortBy);
 
   const handleCellClick = (emp, day, currentStatus) => {
-    if (isLocked) return alert(`❌ Đã khóa sổ tháng này (Ngày khóa: ${config.lockDate})!`);
+    if (isLocked) return alert(`❌ Đã khóa sổ (Ngày ${config.lockDate})!`);
     const selDate = new Date(viewYear, viewMonth-1, day); const today = new Date(); today.setHours(0,0,0,0);
-    if (selDate > today) return alert("Không thể chấm công cho ngày tương lai!");
+    if (selDate > today) return alert("Không chấm công tương lai!");
     if (selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= config.limitHour)) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
     else setAttModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
   };
@@ -507,7 +500,7 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
             <div className="admin-form-container">
               <h3>⚙️ Cấu hình hệ thống</h3>
               <div className="config-container">
-                <div className="config-item"><label>Giờ giới hạn (Sáng)</label><input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} /></div>
+                <div className="config-item"><label>Giờ khóa sổ (Sáng)</label><input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} /></div>
                 <div className="config-item"><label>Ngày khóa sổ tháng</label><input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} /></div>
                 <button className="btn btn-success" onClick={handleUpdateConfig} style={{height:45, marginTop: 'auto', padding:'0 25px'}}>💾 Lưu cấu hình</button>
               </div>
@@ -531,8 +524,10 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
             <div className="admin-form-container">
                 <h3>➕ Cấp tài khoản mới</h3>
                 <form onSubmit={handleCreateAccount}>
-                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required placeholder="VD: khoanoi@benhvien.com" /></div>
-                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required placeholder="Tối thiểu 6 ký tự" /></div>
+                  <div className="form-row">
+                    <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required placeholder="VD: khoanoi@benhvien.com" /></div>
+                    <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required placeholder="Tối thiểu 6 ký tự" /></div>
+                  </div>
                   <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Ban Giám Đốc</option><option value="ADMIN">Quản trị viên hệ thống</option></select></div>
                   {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required placeholder="VD: Khoa Nội Tổng Hợp" /></div>)}
                   <button className="btn btn-success" style={{width:'100%', marginTop: 25, padding: 14, fontSize: 16}} disabled={isCreating}>{isCreating ? '⏳ Đang xử lý...' : '✨ Tạo Tài Khoản Ngay'}</button>
@@ -572,7 +567,6 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   );
 };
 
-// --- LOGIN (GIAO DIỆN MỚI ĐẸP HƠN) ---
 function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
