@@ -104,10 +104,11 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
       <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
         {onShowLegend && <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>}
         
-        <div style={{position:'relative', cursor:'pointer'}} onClick={handleBellClick}>
-            <span style={{fontSize:22, color:'#64748b'}}>🔔</span>
-            {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
-        </div>
+        <div className="notification-container">
+          <div style={{position:'relative', cursor:'pointer'}} onClick={handleBellClick}>
+              <span style={{fontSize:22, color:'#64748b'}}>🔔</span>
+              {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+          </div>
           {showDropdown && (
             <div className="notification-dropdown">
               <div style={{fontWeight:'bold', padding:15, borderBottom:'1px solid #f1f5f9', background:'#f8fafc'}}>Thông báo ({unreadCount} mới)</div>
@@ -125,6 +126,7 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
               ))}
             </div>
           )}
+        </div>
       </div>
     </div>
   );
@@ -270,8 +272,12 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
     const unsubPend = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "PENDING")), (snap) => {
         setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
     });
-    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "in", ["APPROVED", "REJECTED"])), (snap) => {
-      setNotifications(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    const unsubNotif = onSnapshot(query(collection(db, "requests"), 
+      where("dept", "==", userDept), 
+      where("status", "in", ["APPROVED", "REJECTED"])
+    ), (snap) => {
+      const list = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setNotifications(list);
     });
     return () => { unsubAtt(); unsubPend(); unsubNotif(); unsubConf(); unsubSym(); };
   }, [userDept]);
@@ -372,7 +378,6 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
       const d = {}; snap.forEach(doc => { const dt=doc.data(); d[`${dt.empId}_${dt.day}_${dt.month}_${dt.year}`] = dt.status; }); setAttendance(d);
     });
     const unsubReq = onSnapshot(query(collection(db, "requests"), where("status", "==", "PENDING")), (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    
     return () => { unsubAtt(); unsubReq(); unsubSym(); };
   }, []);
 
@@ -473,6 +478,8 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  // State backup
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   useEffect(() => {
     const unsubConf = onSnapshot(doc(db, "settings", "config"), (doc) => { if (doc.exists()) setConfig(doc.data()); });
@@ -503,6 +510,28 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const handleDeleteEmployee = async (id) => { if(confirm("Xóa nhân viên này?")) await deleteDoc(doc(db, "employees", id)); };
   const changeSymbol = (idx, field, val) => { const newSyms = [...symbols]; newSyms[idx][field] = val; setSymbols(newSyms); };
   const finalEmployees = sortEmployees(employees.filter(e => e.name && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase()) || e.dept.toLowerCase().includes(searchTerm.toLowerCase()))), sortBy);
+
+  // Backup Function
+  const handleBackupSystem = async () => {
+    if (!confirm("Tải xuống bản sao lưu toàn bộ hệ thống?")) return;
+    setIsBackingUp(true);
+    try {
+      const backupData = {};
+      const empSnap = await getDocs(collection(db, "employees")); backupData.employees = empSnap.docs.map(d => d.data());
+      const attSnap = await getDocs(collection(db, "attendance")); backupData.attendance = attSnap.docs.map(d => d.data());
+      const userSnap = await getDocs(collection(db, "users")); backupData.users = userSnap.docs.map(d => ({id: d.id, ...d.data()}));
+      const confSnap = await getDocs(collection(db, "settings")); backupData.settings = confSnap.docs.map(d => ({id: d.id, ...d.data()}));
+      const reqSnap = await getDocs(collection(db, "requests")); backupData.requests = reqSnap.docs.map(d => ({id: d.id, ...d.data()}));
+      const dataStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a'); link.href = url;
+      const date = new Date().toISOString().slice(0,10);
+      link.download = `BACKUP_CHAMCONG_${date}.json`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      alert("✅ Đã tải xuống file sao lưu!");
+    } catch (error) { alert("❌ Lỗi sao lưu: " + error.message); } finally { setIsBackingUp(false); }
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -571,6 +600,9 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
                 <div className="config-item"><label>Giờ khóa sổ (Sáng)</label><input type="number" className="config-input" value={config.limitHour} onChange={e=>setConfig({...config, limitHour: Number(e.target.value)})} /></div>
                 <div className="config-item"><label>Ngày khóa sổ tháng</label><input type="number" className="config-input" value={config.lockDate} onChange={e=>setConfig({...config, lockDate: Number(e.target.value)})} /></div>
                 <button className="btn btn-success" onClick={handleUpdateConfig} style={{height:45, marginTop:'auto', padding:'0 25px'}}>Lưu cấu hình</button>
+              </div>
+              <div style={{marginTop:20, textAlign:'center'}}>
+                 <button className="btn" style={{background:'#7c3aed', color:'white'}} onClick={handleBackupSystem} disabled={isBackingUp}>{isBackingUp ? '⏳ Đang tải...' : '💾 Tải bản sao lưu (Backup)'}</button>
               </div>
             </div>
           </div>
