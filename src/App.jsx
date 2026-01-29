@@ -102,7 +102,6 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
         <h2 style={{margin: 0, fontSize: '18px', color: '#1e293b', fontWeight: '700'}}>{title}</h2>
       </div>
       <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
-        {/* FIX: Chỉ hiện nút Ký hiệu nếu có hàm xử lý */}
         {onShowLegend && <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>}
         
         <div style={{position:'relative', cursor:'pointer'}} onClick={handleBellClick}>
@@ -354,8 +353,6 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [departments, setDepartments] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [requests, setRequests] = useState([]);
-  // FIX: Thêm state notifications cho Giám Đốc
-  const [notifications, setNotifications] = useState([]);
   const [selDept, setSelDept] = useState('ALL');
   const [selMonth, setSelMonth] = useState(new Date().getMonth() + 1);
   const [selYear, setSelYear] = useState(new Date().getFullYear());
@@ -376,11 +373,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     });
     const unsubReq = onSnapshot(query(collection(db, "requests"), where("status", "==", "PENDING")), (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     
-    // FIX: Lắng nghe các yêu cầu đã xử lý để hiện thông báo
-    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("status", "in", ["APPROVED", "REJECTED"])), (snap) => {
-        setNotifications(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    });
-    return () => { unsubAtt(); unsubReq(); unsubSym(); unsubNotif(); };
+    return () => { unsubAtt(); unsubReq(); unsubSym(); };
   }, []);
 
   useEffect(() => {
@@ -427,8 +420,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     <div className="app-container">
       <Sidebar userRole="GIAMDOC" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        {/* FIX: Truyền notifications vào Header */}
-        <Header title="Tổng Quan Giám Đốc" email={userEmail} notifications={notifications} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
+        <Header title="Tổng Quan Giám Đốc" email={userEmail} notifications={[]} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
           <div style={{display:'flex', gap:20, flexWrap:'wrap', marginBottom: 25}}>
             <div style={{...cardStyle}}><div style={{...statValue, color:'#2563eb'}}>{todayStats.total}</div><div style={statLabel}>Tổng nhân sự</div></div>
@@ -439,8 +431,8 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           {requests.length > 0 && (
             <div className="card" style={{borderLeft:'4px solid #2563eb'}}><h3>📝 Yêu cầu chờ duyệt ({requests.length})</h3>
               <table className="request-table">
-                <thead><tr><th>Khoa</th><th>NV</th><th>Ngày</th><th>Đổi thành</th><th>Thao tác</th></tr></thead>
-                <tbody>{requests.map(req => (<tr key={req.id}><td data-label="Khoa">{req.dept}</td><td data-label="NV" style={{fontWeight:600}}>{req.empName}</td><td data-label="Ngày">{req.day}/{req.month}</td><td data-label="Đổi" style={{color:'#10b981', fontWeight:'bold', fontSize:14}}>{req.requestType}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-success" onClick={()=>handleApprove(req)}>Chấp nhận</button><button className="btn btn-danger" onClick={()=>handleReject(req)}>Từ chối</button></div></td></tr>))}</tbody>
+                <thead><tr><th>Khoa</th><th>NV</th><th>Ngày</th><th>Đổi thành</th><th>Lý do</th><th>Thao tác</th></tr></thead>
+                <tbody>{requests.map(req => (<tr key={req.id}><td data-label="Khoa">{req.dept}</td><td data-label="NV" style={{fontWeight:600}}>{req.empName}</td><td data-label="Ngày">{req.day}/{req.month}</td><td data-label="Đổi" style={{color:'#10b981', fontWeight:'bold', fontSize:14}}>{req.requestType}</td><td data-label="Lý do">{req.reason}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-success" onClick={()=>handleApprove(req)}>Chấp nhận</button><button className="btn btn-danger" onClick={()=>handleReject(req)}>Từ chối</button></div></td></tr>))}</tbody>
               </table>
             </div>
           )}
@@ -536,7 +528,6 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           <div className="card full-height"><h3>Danh sách tài khoản ({accounts.length})</h3>
             <div className="matrix-wrapper">
               <table className="request-table"><thead><tr><th>Email</th><th>Quyền hạn</th><th>Khoa</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
-                {/* FIX: Sửa text nút gửi mail */}
                 <tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email" style={{fontWeight:600}}>{a.email}</td><td data-label="Quyền"><span style={{fontWeight:700, padding:'4px 10px', borderRadius:6, background: a.role==='ADMIN'?'#fee2e2':(a.role==='GIAMDOC'?'#dbeafe':'#f1f5f9'), color: a.role==='ADMIN'?'#dc2626':(a.role==='GIAMDOC'?'#2563eb':'#64748b')}}>{a.role}</span></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-primary" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleResetPassword(a.email)}>📧 Gửi Mail Reset Pass</button><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></div></td></tr>))}</tbody>
               </table>
             </div>
@@ -549,12 +540,12 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
               <h3 style={{textAlign:'center', marginBottom:20, color:'#2563eb'}}>➕ Cấp tài khoản mới</h3>
               <form onSubmit={handleCreateAccount}>
                 <div className="form-row">
-                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required placeholder="VD: khoanoi@benhvien.com" /></div>
-                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required placeholder="Tối thiểu 6 ký tự" /></div>
+                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required /></div>
+                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required /></div>
                 </div>
                 <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Giám Đốc</option><option value="ADMIN">Quản trị viên hệ thống</option></select></div>
-                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required placeholder="VD: Khoa Nội Tổng Hợp" /></div>)}
-                <button className="btn btn-success" style={{width:'100%', marginTop: 20, padding: 14, fontSize: 16}} disabled={isCreating}>{isCreating ? '⏳ Đang xử lý...' : '✨ Tạo Tài Khoản Ngay'}</button>
+                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required /></div>)}
+                <button className="btn btn-success" style={{width:'100%', marginTop: 20, padding: 14}} disabled={isCreating}>{isCreating ? 'Đang tạo...' : 'Tạo Tài Khoản'}</button>
               </form>
             </div>
           </div>
@@ -600,7 +591,7 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
         setActiveTab={setActiveTab}
       />
       <div className="main-content">
-        {/* FIX: Truyền null để ẩn nút ký hiệu */}
+        {/* FIX: Truyền null để ẩn nút Ký hiệu cho Admin */}
         <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={null} />
         <div className="dashboard-content">
           {renderContent()}
