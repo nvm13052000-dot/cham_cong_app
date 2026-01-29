@@ -102,7 +102,9 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
         <h2 style={{margin: 0, fontSize: '18px', color: '#1e293b', fontWeight: '700'}}>{title}</h2>
       </div>
       <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
-        <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>
+        {/* FIX: Chỉ hiện nút Ký hiệu nếu có hàm xử lý */}
+        {onShowLegend && <button className="btn" style={{background:'#f1f5f9', color:'#64748b', border:'1px solid #e2e8f0', padding:'8px 12px'}} onClick={onShowLegend}>📖 <span style={{display: window.innerWidth<500?'none':'inline'}}>Ký hiệu</span></button>}
+        
         <div style={{position:'relative', cursor:'pointer'}} onClick={handleBellClick}>
             <span style={{fontSize:22, color:'#64748b'}}>🔔</span>
             {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
@@ -352,6 +354,8 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [departments, setDepartments] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [requests, setRequests] = useState([]);
+  // FIX: Thêm state notifications cho Giám Đốc
+  const [notifications, setNotifications] = useState([]);
   const [selDept, setSelDept] = useState('ALL');
   const [selMonth, setSelMonth] = useState(new Date().getMonth() + 1);
   const [selYear, setSelYear] = useState(new Date().getFullYear());
@@ -359,7 +363,8 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sortBy, setSortBy] = useState('name');
   const [symbols, setSymbols] = useState(DEFAULT_SYMBOLS);
   const [legendOpen, setLegendOpen] = useState(false);
-  
+  const [todayStats, setTodayStats] = useState({ total: 0, present: 0, unpaid: 0 });
+
   useEffect(() => {
     const unsubSym = onSnapshot(doc(db, "settings", "symbols"), (doc) => { if (doc.exists() && doc.data().list) setSymbols(doc.data().list); });
     getDocs(collection(db, "employees")).then(snap => {
@@ -370,8 +375,24 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
       const d = {}; snap.forEach(doc => { const dt=doc.data(); d[`${dt.empId}_${dt.day}_${dt.month}_${dt.year}`] = dt.status; }); setAttendance(d);
     });
     const unsubReq = onSnapshot(query(collection(db, "requests"), where("status", "==", "PENDING")), (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    return () => { unsubAtt(); unsubReq(); unsubSym(); };
+    
+    // FIX: Lắng nghe các yêu cầu đã xử lý để hiện thông báo
+    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("status", "in", ["APPROVED", "REJECTED"])), (snap) => {
+        setNotifications(snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    });
+    return () => { unsubAtt(); unsubReq(); unsubSym(); unsubNotif(); };
   }, []);
+
+  useEffect(() => {
+    if (allEmployees.length === 0) return;
+    const today = new Date(); const d = today.getDate(); const m = today.getMonth()+1; const y = today.getFullYear();
+    let present = 0, unpaid = 0;
+    allEmployees.forEach(emp => {
+      const key = `${emp.id}_${d}_${m}_${y}`; const code = attendance[key];
+      if (code) { const sym = symbols.find(s => s.code === code); if (sym && sym.type === 'SALARY') present++; else unpaid++; } else unpaid++;
+    });
+    setTodayStats({ total: allEmployees.length, present, unpaid });
+  }, [attendance, allEmployees, symbols]);
 
   const handleApprove = async (req) => {
     if(!confirm(`Duyệt yêu cầu của ${req.empName}?`)) return;
@@ -398,12 +419,23 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "ChamCong"); XLSX.writeFile(wb, `BaoCao_TongHop_T${selMonth}_${selYear}.xlsx`);
   };
 
+  const cardStyle = { background: '#fff', padding: '20px', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)', flex: 1, minWidth: 160, textAlign:'left', border:'1px solid #e2e8f0' };
+  const statValue = { fontSize: 28, fontWeight: 800, lineHeight: 1, marginBottom: 8 };
+  const statLabel = { fontSize: 14, color: '#64748b', fontWeight: 600 };
+  
   return (
     <div className="app-container">
       <Sidebar userRole="GIAMDOC" isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} onLogout={onLogout} onOpenChangePass={onOpenChangePass} />
       <div className="main-content">
-        <Header title="Tổng Quan Giám Đốc" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
+        {/* FIX: Truyền notifications vào Header */}
+        <Header title="Tổng Quan Giám Đốc" email={userEmail} notifications={notifications} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
+          <div style={{display:'flex', gap:20, flexWrap:'wrap', marginBottom: 25}}>
+            <div style={{...cardStyle}}><div style={{...statValue, color:'#2563eb'}}>{todayStats.total}</div><div style={statLabel}>Tổng nhân sự</div></div>
+            <div style={{...cardStyle}}><div style={{...statValue, color:'#10b981'}}>{todayStats.present}</div><div style={statLabel}>Đi làm hôm nay</div></div>
+            <div style={{...cardStyle}}><div style={{...statValue, color:'#ef4444'}}>{todayStats.unpaid}</div><div style={statLabel}>Vắng / Ko lương</div></div>
+          </div>
+
           {requests.length > 0 && (
             <div className="card" style={{borderLeft:'4px solid #2563eb'}}><h3>📝 Yêu cầu chờ duyệt ({requests.length})</h3>
               <table className="request-table">
@@ -440,7 +472,6 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
 // --- SCREEN 3: ADMIN (MENU BÊN TRÁI) ---
 const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // --- CHUYỂN TAB VÀO STATE, ĐƯỢC ĐIỀU KHIỂN BỞI SIDEBAR ---
   const [activeTab, setActiveTab] = useState('employees');
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]); 
@@ -481,7 +512,6 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const changeSymbol = (idx, field, val) => { const newSyms = [...symbols]; newSyms[idx][field] = val; setSymbols(newSyms); };
   const finalEmployees = sortEmployees(employees.filter(e => e.name && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.id.toLowerCase().includes(searchTerm.toLowerCase()) || e.dept.toLowerCase().includes(searchTerm.toLowerCase()))), sortBy);
 
-  // --- RENDER CONTENT BASED ON TAB ---
   const renderContent = () => {
     switch (activeTab) {
       case 'employees':
@@ -506,7 +536,8 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           <div className="card full-height"><h3>Danh sách tài khoản ({accounts.length})</h3>
             <div className="matrix-wrapper">
               <table className="request-table"><thead><tr><th>Email</th><th>Quyền hạn</th><th>Khoa</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
-                <tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email" style={{fontWeight:600}}>{a.email}</td><td data-label="Quyền"><span style={{fontWeight:700, padding:'4px 10px', borderRadius:6, background: a.role==='ADMIN'?'#fee2e2':(a.role==='GIAMDOC'?'#dbeafe':'#f1f5f9'), color: a.role==='ADMIN'?'#dc2626':(a.role==='GIAMDOC'?'#2563eb':'#64748b')}}>{a.role}</span></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-primary" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleResetPassword(a.email)}>Mail</button><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></div></td></tr>))}</tbody>
+                {/* FIX: Sửa text nút gửi mail */}
+                <tbody>{accounts.map(a => (<tr key={a.id}><td data-label="Email" style={{fontWeight:600}}>{a.email}</td><td data-label="Quyền"><span style={{fontWeight:700, padding:'4px 10px', borderRadius:6, background: a.role==='ADMIN'?'#fee2e2':(a.role==='GIAMDOC'?'#dbeafe':'#f1f5f9'), color: a.role==='ADMIN'?'#dc2626':(a.role==='GIAMDOC'?'#2563eb':'#64748b')}}>{a.role}</span></td><td data-label="Khoa">{a.dept||'-'}</td><td data-label="Thao tác" style={{textAlign:'right'}}><div style={{display:'flex', gap:10, justifyContent:'flex-end'}}><button className="btn btn-primary" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleResetPassword(a.email)}>📧 Gửi Mail Reset Pass</button><button className="btn btn-logout" style={{fontSize:13, padding:'8px 12px'}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></div></td></tr>))}</tbody>
               </table>
             </div>
           </div>
@@ -518,12 +549,12 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
               <h3 style={{textAlign:'center', marginBottom:20, color:'#2563eb'}}>➕ Cấp tài khoản mới</h3>
               <form onSubmit={handleCreateAccount}>
                 <div className="form-row">
-                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required /></div>
-                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required /></div>
+                  <div className="form-group"><label>Email đăng nhập</label><input className="login-input" type="email" value={newAcc.email} onChange={e=>setNewAcc({...newAcc, email: e.target.value})} required placeholder="VD: khoanoi@benhvien.com" /></div>
+                  <div className="form-group"><label>Mật khẩu</label><input className="login-input" type="text" value={newAcc.pass} onChange={e=>setNewAcc({...newAcc, pass: e.target.value})} required placeholder="Tối thiểu 6 ký tự" /></div>
                 </div>
-                <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Giám Đốc</option><option value="ADMIN">Admin</option></select></div>
-                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required /></div>)}
-                <button className="btn btn-success" style={{width:'100%', marginTop: 20, padding: 14}} disabled={isCreating}>{isCreating ? 'Đang tạo...' : 'Tạo Tài Khoản'}</button>
+                <div className="form-group"><label>Loại tài khoản</label><select className="select-box" style={{width:'100%', padding: 12}} value={newAcc.role} onChange={e=>setNewAcc({...newAcc, role: e.target.value})}><option value="KHOA">Khoa / Phòng ban</option><option value="GIAMDOC">Giám Đốc</option><option value="ADMIN">Quản trị viên hệ thống</option></select></div>
+                {newAcc.role === 'KHOA' && (<div className="form-group"><label>Tên Khoa (Hiển thị)</label><input className="login-input" type="text" value={newAcc.dept} onChange={e=>setNewAcc({...newAcc, dept: e.target.value})} required placeholder="VD: Khoa Nội Tổng Hợp" /></div>)}
+                <button className="btn btn-success" style={{width:'100%', marginTop: 20, padding: 14, fontSize: 16}} disabled={isCreating}>{isCreating ? '⏳ Đang xử lý...' : '✨ Tạo Tài Khoản Ngay'}</button>
               </form>
             </div>
           </div>
@@ -569,7 +600,8 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
         setActiveTab={setActiveTab}
       />
       <div className="main-content">
-        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={()=>{}} />
+        {/* FIX: Truyền null để ẩn nút ký hiệu */}
+        <Header title="Quản Trị Hệ Thống" email={userEmail} onMenuClick={()=>setSidebarOpen(true)} onShowLegend={null} />
         <div className="dashboard-content">
           {renderContent()}
         </div>
@@ -604,18 +636,20 @@ function App() {
     return (
       <div className="login-container">
         <form onSubmit={handleLogin} className="login-card">
-          <div className="login-icon">🏥</div>
-          <div className="login-title">Hệ Thống Chấm Công</div>
-          <div className="login-subtitle">Vui lòng đăng nhập để tiếp tục</div>
-          <div className="form-group" style={{textAlign:'left', marginTop:30}}>
+          <div className="login-header">
+            <div className="login-icon">🏥</div>
+            <h2 className="login-title">Hệ Thống Chấm Công</h2>
+            <p className="login-subtitle">Vui lòng đăng nhập để tiếp tục</p>
+          </div>
+          <div className="form-group">
             <label>Email đăng nhập</label>
-            <input className="login-input" type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required placeholder="name@example.com" style={{padding:'14px'}}/>
+            <input className="login-input" type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required placeholder="name@example.com" style={{padding:'12px'}}/>
           </div>
-          <div className="form-group" style={{textAlign:'left'}}>
+          <div className="form-group">
             <label>Mật khẩu</label>
-            <input className="login-input" type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required placeholder="••••••••" style={{padding:'14px'}}/>
+            <input className="login-input" type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required placeholder="••••••••" style={{padding:'12px'}}/>
           </div>
-          <button className="btn btn-primary" style={{width:'100%', padding:14, fontSize:16, marginTop:10}}>ĐĂNG NHẬP</button>
+          <button className="btn btn-primary" style={{width:'100%', padding:14, fontSize:16, marginTop:15}}>ĐĂNG NHẬP</button>
         </form>
       </div>
     );
