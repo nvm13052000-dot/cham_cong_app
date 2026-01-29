@@ -118,6 +118,7 @@ const Header = ({ title, email, notifications = [], onMenuClick, onShowLegend })
 const LegendModal = ({ isOpen, onClose, symbols }) => {
   if (!isOpen) return null;
   const sortedSymbols = [...symbols].sort((a, b) => (a.order || 99) - (b.order || 99));
+  
   return (
     <div className="modal-overlay">
       <div className="modal-content modal-lg">
@@ -128,7 +129,8 @@ const LegendModal = ({ isOpen, onClose, symbols }) => {
         <div className="legend-grid">
           {sortedSymbols.map(s => (
             <div key={s.code} className="legend-item">
-              <span className="legend-symbol">{s.code}</span><span>{s.label}</span>
+              <span className="legend-symbol">{s.code}</span>
+              <span>{s.label}</span>
             </div>
           ))}
         </div>
@@ -227,8 +229,8 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
         <thead>
           <tr><th style={{height: 35}}></th>{days.map(d => <th key={d} className={`th-day-name ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{getDayName(d,month,year)}</th>)}<th colSpan={3} style={{background: '#f1f5f9', fontSize:11}}>TỔNG HỢP</th></tr>
           <tr>
-            <th style={{top: 35}}>NHÂN VIÊN</th> {/* top 35 để khớp với header 2 dòng */}
-            {days.map(d => <th key={d} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}
+            <th style={{top: 35}}>NHÂN VIÊN</th>
+            {days.map(d => <th key={d} style={{top: 35}} className={`th-date-num ${['T7','CN'].includes(getDayName(d,month,year))?'bg-weekend':''}`}>{d}</th>)}
             <th className="col-total col-salary" style={{top:35}}>Lương TG (32)</th><th className="col-total col-unpaid" style={{top:35}}>Ko Lương (33)</th><th className="col-total col-insurance" style={{top:35}}>BHXH (34)</th>
           </tr>
         </thead>
@@ -254,7 +256,7 @@ const AttendanceTable = ({ employees, attendanceData, onCellClick, month, year, 
   );
 };
 
-// --- SCREEN 1: KHOA (THÊM class full-height) ---
+// --- SCREEN 1: KHOA ---
 const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) => {
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -280,7 +282,10 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
     const unsubPend = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "==", "PENDING")), (snap) => {
         setPendingKeys(snap.docs.map(doc => { const d = doc.data(); return `${d.empId}_${d.day}_${d.month}_${d.year}`; }));
     });
-    const unsubNotif = onSnapshot(query(collection(db, "requests"), where("dept", "==", userDept), where("status", "in", ["APPROVED", "REJECTED"])), (snap) => {
+    const unsubNotif = onSnapshot(query(collection(db, "requests"), 
+      where("dept", "==", userDept), 
+      where("status", "in", ["APPROVED", "REJECTED"])
+    ), (snap) => {
       const list = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
       setNotifications(list);
     });
@@ -299,12 +304,18 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
     if (isLocked) return alert(`❌ Đã khóa sổ (Ngày ${config.lockDate})!`);
     const selDate = new Date(viewYear, viewMonth-1, day); const today = new Date(); today.setHours(0,0,0,0);
     if (selDate > today) return alert("Không chấm công tương lai!");
-    if (selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= config.limitHour)) setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
-    else setAttModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
+    
+    if (selDate < today || (selDate.getTime() === today.getTime() && new Date().getHours() >= config.limitHour)) {
+      setModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
+    } else {
+      setAttModal({ isOpen: true, emp, day, month: viewMonth, year: viewYear });
+    }
   };
 
   const handleSaveAttendance = (code) => {
-    setDoc(doc(db, "attendance", `${attModal.emp.id}_${attModal.day}_${viewMonth}_${viewYear}`), { empId: attModal.emp.id, day: attModal.day, month: viewMonth, year: viewYear, dept: attModal.emp.dept, status: code });
+    setDoc(doc(db, "attendance", `${attModal.emp.id}_${attModal.day}_${viewMonth}_${viewYear}`), { 
+      empId: attModal.emp.id, day: attModal.day, month: viewMonth, year: viewYear, dept: attModal.emp.dept, status: code 
+    });
     setAttModal({ isOpen: false, emp: null, day: null });
   };
 
@@ -319,10 +330,15 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
       const r = { "Mã NV": emp.id, "Tên NV": emp.name };
       let salary = 0, unpaid = 0, insurance = 0;
       days.forEach(d => { 
-        const code = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || ''; r[`Ngày ${d}`] = code; 
+        const code = attendance[`${emp.id}_${d}_${viewMonth}_${viewYear}`] || ''; 
+        r[`Ngày ${d}`] = code; 
         if (code) {
           const sym = symbols.find(s => s.code === code);
-          if (sym) { if (sym.type === 'SALARY') salary += Number(sym.val); if (sym.type === 'UNPAID') unpaid += Number(sym.val); if (sym.type === 'INSURANCE') insurance += Number(sym.val); }
+          if (sym) {
+            if (sym.type === 'SALARY') salary += Number(sym.val);
+            if (sym.type === 'UNPAID') unpaid += Number(sym.val);
+            if (sym.type === 'INSURANCE') insurance += Number(sym.val);
+          }
         }
       });
       r["Lương TG (32)"] = salary; r["Ko Lương (33)"] = unpaid; r["BHXH (34)"] = insurance;
@@ -337,7 +353,7 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
       <div className="main-content">
         <Header title={`Khoa: ${userDept}`} email={userEmail} notifications={notifications} onMenuClick={()=>{}} onShowLegend={()=>setLegendOpen(true)} />
         <div className="dashboard-content">
-          <div className="card full-height"> {/* Thêm class full-height */}
+          <div className="card full-height"> 
             <div className="toolbar">
               <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm kiếm..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
               <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
@@ -358,7 +374,7 @@ const DepartmentScreen = ({ userDept, userEmail, onLogout, onOpenChangePass }) =
   );
 };
 
-// --- SCREEN 2: GIAMDOC (THÊM class full-height) ---
+// --- SCREEN 2: GIAMDOC ---
 const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [allEmployees, setAllEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -450,7 +466,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
             </div>
           )}
 
-          <div className="card full-height"> {/* Thêm class full-height */}
+          <div className="card full-height">
             <div className="toolbar">
               <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm tên nhân viên..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
               <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
@@ -471,7 +487,7 @@ const DirectorScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   );
 };
 
-// --- SCREEN 3: ADMIN (GIỮ NGUYÊN) ---
+// --- SCREEN 3: ADMIN (FIX FULL HEIGHT) ---
 const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('employees');
@@ -544,12 +560,12 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           )}
 
           {activeTab === 'symbols' && (
-            <div className="card">
+            <div className="card full-height"> {/* Full height cho bảng symbols */}
               <div style={{display:'flex', justifyContent:'space-between', marginBottom:10}}>
                 <h3>⚙️ Quản lý ký hiệu</h3>
                 <div><button className="btn" onClick={handleResetSymbols} style={{marginRight:10}}>Khôi phục</button><button className="btn btn-success" onClick={handleUpdateSymbols}>Lưu thay đổi</button></div>
               </div>
-              <div style={{maxHeight:'60vh', overflow:'auto'}}>
+              <div className="table-fill"> {/* Dùng class mới */}
                 <table className="request-table">
                   <thead><tr><th>STT</th><th>Ký hiệu</th><th>Mô tả</th><th>Giá trị</th><th>Nhóm tính tổng</th></tr></thead>
                   <tbody>
@@ -579,17 +595,22 @@ const AdminScreen = ({ userEmail, onLogout, onOpenChangePass }) => {
           )}
 
           {activeTab === 'accounts' && (
-            <div className="card"><h3>Danh sách tài khoản ({accounts.length})</h3><table className="request-table" style={{marginTop:10}}><thead><tr><th>Email</th><th>Quyền</th><th>Khoa</th><th>Thao tác</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td>{a.email}</td><td><b>{a.role}</b></td><td>{a.dept||'-'}</td><td><button className="btn btn-primary" style={{fontSize:11, marginRight:5}} onClick={()=>handleResetPassword(a.email)}>Mail Reset</button><button className="btn btn-logout" style={{fontSize:11}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></td></tr>))}</tbody></table></div>
+            <div className="card full-height"> {/* Full height cho bảng account */}
+              <h3>Danh sách tài khoản ({accounts.length})</h3>
+              <div className="table-fill">
+                <table className="request-table"><thead><tr><th>Email</th><th>Quyền</th><th>Khoa</th><th>Thao tác</th></tr></thead><tbody>{accounts.map(a => (<tr key={a.id}><td>{a.email}</td><td><b>{a.role}</b></td><td>{a.dept||'-'}</td><td><button className="btn btn-primary" style={{fontSize:11, marginRight:5}} onClick={()=>handleResetPassword(a.email)}>Mail Reset</button><button className="btn btn-logout" style={{fontSize:11}} onClick={()=>handleDeleteAccount(a.id, a.email)}>Xóa</button></td></tr>))}</tbody></table>
+              </div>
+            </div>
           )}
           
           {activeTab === 'employees' && (
-            <div className="card">
+            <div className="card full-height"> {/* Full height cho bảng nhân viên */}
               <div className="toolbar">
                  <div className="search-box"><span className="search-icon">🔍</span><input className="search-input" placeholder="Tìm tên, mã, hoặc khoa..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
                  <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="name">Tên A-Z</option><option value="position">Chức vụ</option></select>
                  <label className="btn btn-primary" style={{cursor:'pointer', marginLeft:'auto'}}>📂 Import Excel<input type="file" hidden onChange={handleFileUpload} /></label>
               </div>
-              <div style={{maxHeight:'60vh', overflow:'auto'}}>
+              <div className="table-fill"> {/* Thay thế maxHeight bằng class mới */}
                 <table className="request-table">
                   <thead><tr><th>Mã</th><th>Tên</th><th>Khoa</th><th>Chức Vụ</th><th style={{textAlign:'right'}}>Thao tác</th></tr></thead>
                   <tbody>{finalEmployees.map(e => (<tr key={e.id}><td>{e.id}</td><td>{e.name}</td><td>{e.dept}</td><td>{e.position}</td><td style={{textAlign:'right'}}><button className="btn btn-logout" onClick={()=>handleDeleteEmployee(e.id)}>Xóa</button></td></tr>))}</tbody>
